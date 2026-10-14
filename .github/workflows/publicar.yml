@@ -1,0 +1,45 @@
+name: Publicar dados do painel
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publicar-dados
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: America/Sao_Paulo
+      DEFAULT_INICIO: "2026-07-01"
+      OMIE_EMPRESA: JCA Filial
+      OMIE_APP_KEY: ${{ secrets.OMIE_APP_KEY }}
+      OMIE_APP_SECRET: ${{ secrets.OMIE_APP_SECRET }}
+      PAINEL_DATA_KEY: ${{ secrets.PAINEL_DATA_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install httpx python-dotenv cryptography
+
+      # consumidor_final de cada pedido (ConsultarPedido); sem o cache a Omie bloqueia por excesso de chamadas
+      - uses: actions/cache@v4
+        with:
+          path: backend/data/cache_pedidos.json
+          key: pedidos-${{ github.run_id }}
+          restore-keys: pedidos-
+
+      - run: python scripts/publicar_dados.py

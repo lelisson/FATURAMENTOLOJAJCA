@@ -1,12 +1,16 @@
 """App Streamlit: o mesmo painel do localhost:8000.
 
 Fontes de dados, nesta ordem:
-- snapshot: PAINEL_DATA_URL + PAINEL_DATA_KEY → arquivo criptografado publicado pelo PC
+- snapshot: PAINEL_DATA_URL + PAINEL_DATA_KEY → arquivo criptografado publicado pelo GitHub Actions
   (scripts/publicar_dados.py). As chaves da Omie não ficam no Streamlit.
 - omie: OMIE_APP_KEY + OMIE_APP_SECRET → consulta direta (somente leitura).
 - sample: dados fictícios (backend/data/vendas_demo.json).
+
+Senha: APP_PASSWORD_HASH (gerado por scripts/gerar_secrets.py); a senha em si não fica guardada.
 """
 import gzip
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -45,18 +49,41 @@ iframe{border-radius:12px}
 </style>""", unsafe_allow_html=True)
 
 
+MAX_TENTATIVAS, ESPERA_BLOQUEIO = 5, 300
+
+
+def senha_confere(tentativa: str) -> bool:
+    guardado = os.getenv("APP_PASSWORD_HASH", "")
+    if guardado:
+        try:
+            _, iteracoes, sal, alvo = guardado.split("$")
+            calc = hashlib.pbkdf2_hmac("sha256", tentativa.encode(), bytes.fromhex(sal), int(iteracoes)).hex()
+        except ValueError:
+            return False
+        return hmac.compare_digest(calc, alvo)
+    return hmac.compare_digest(tentativa.encode(), os.getenv("APP_PASSWORD", "").encode())
+
+
 def exigir_senha() -> None:
-    senha = os.getenv("APP_PASSWORD")
-    if not senha or st.session_state.get("ok"):
+    if not (os.getenv("APP_PASSWORD_HASH") or os.getenv("APP_PASSWORD")) or st.session_state.get("ok"):
         return
     with st.form("login"):
         st.subheader(f"Painel de vendas · {EMPRESA}")
         tentativa = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if tentativa == senha:
-                st.session_state["ok"] = True
+            restante = st.session_state.get("bloqueio", 0) - time.time()
+            if restante > 0:
+                st.error(f"Muitas tentativas. Tente de novo em {int(restante // 60) + 1} min.")
+            elif senha_confere(tentativa):
+                st.session_state.update(ok=True, erros=0)
                 st.rerun()
-            st.error("Senha incorreta.")
+            else:
+                time.sleep(1.5)
+                erros = st.session_state.get("erros", 0) + 1
+                st.session_state["erros"] = erros
+                if erros >= MAX_TENTATIVAS:
+                    st.session_state.update(erros=0, bloqueio=time.time() + ESPERA_BLOQUEIO)
+                st.error("Senha incorreta.")
     st.stop()
 
 

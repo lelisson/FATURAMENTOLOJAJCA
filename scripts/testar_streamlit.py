@@ -18,8 +18,13 @@ if "snapshot" not in sys.argv:
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=120).run()
-if at.text_input and os.getenv("APP_PASSWORD"):
-    at.text_input[0].input(os.environ["APP_PASSWORD"])
+arquivo_senha = Path.home() / ".painel-omie" / "senha-streamlit.txt"
+if at.text_input and arquivo_senha.exists():
+    senha = arquivo_senha.read_text(encoding="utf-8").splitlines()[0].split(": ", 1)[1].strip()
+    at.text_input[0].input("errada")
+    at.button[0].click().run()
+    print("senha errada recusada:", [e.value for e in at.error] == ["Senha incorreta."])
+    at.text_input[0].input(senha)
     at.button[0].click().run()
 assert not at.exception, at.exception
 html = [e for e in at.get("iframe")] or [e for e in at.get("html")]

@@ -1,9 +1,10 @@
 """Publica os dados do painel, criptografados, no branch `dados` do GitHub (lido pelo app Streamlit).
 
-As chaves da Omie ficam só neste PC. O GitHub recebe apenas `painel.enc` (JSON compactado e cifrado
-com Fernet/PAINEL_DATA_KEY). O branch é sobrescrito a cada execução, sem acumular histórico.
+O branch recebe apenas `painel.enc` (JSON compactado e cifrado com Fernet/PAINEL_DATA_KEY) e é
+sobrescrito a cada execução, sem acumular histórico.
 
-Uso: python scripts/publicar_dados.py   (tarefa agendada a cada 30 min)
+Uso: python scripts/publicar_dados.py
+Roda no GitHub Actions (.github/workflows/publicar.yml, chaves em GitHub Secrets) ou num PC com .env.
 """
 import gzip
 import json
@@ -25,15 +26,24 @@ from cryptography.fernet import Fernet  # noqa: E402
 
 from backend.app import omie  # noqa: E402
 
-# Fora do AppData: o Python da Microsoft Store redireciona gravações ali e o git não enxerga a pasta.
-BASE = Path.home() / ".painel-omie"
+NO_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
+if NO_ACTIONS:
+    BASE = Path(os.environ["RUNNER_TEMP"]) / "painel-omie"
+    REMOTO = (f"https://x-access-token:{os.environ['GITHUB_TOKEN']}@github.com/"
+              f"{os.environ['GITHUB_REPOSITORY']}.git")
+else:
+    # Fora do AppData: o Python da Microsoft Store redireciona gravações ali e o git não enxerga a pasta.
+    BASE = Path.home() / ".painel-omie"
+    REMOTO = os.getenv("PAINEL_DATA_REMOTE", "https://github.com/lelisson/FATURAMENTOLOJAJCA.git")
 PASTA = BASE / "dados-repo"
 LOG = BASE / "publicar.log"
-REMOTO = os.getenv("PAINEL_DATA_REMOTE", "https://github.com/lelisson/FATURAMENTOLOJAJCA.git")
 SEM_JANELA = 0x08000000 if os.name == "nt" else 0
 
 
 def log(msg: str) -> None:
+    if NO_ACTIONS:
+        print(msg)
+        return
     BASE.mkdir(parents=True, exist_ok=True)
     if LOG.exists() and LOG.stat().st_size > 200_000:
         LOG.write_text("", encoding="utf-8")
@@ -59,6 +69,9 @@ def publicar(blob: bytes, carimbo: str) -> None:
     if not (PASTA / ".git").exists():
         git("init", "-q", "-b", "dados")
         git("remote", "add", "origin", REMOTO)
+        if NO_ACTIONS:
+            git("config", "user.name", "github-actions[bot]")
+            git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
     (PASTA / "painel.enc").write_bytes(blob)
     (PASTA / "README.md").write_text("Dados do painel, criptografados e atualizados automaticamente. Não editar.\n",
                                      encoding="utf-8")
@@ -67,7 +80,7 @@ def publicar(blob: bytes, carimbo: str) -> None:
     git("commit", "-q", *(["--amend"] if tem_commit else []), "-m", f"dados {carimbo}")
     r = git("push", "-q", "-f", "origin", "dados")
     if r.returncode != 0:
-        raise RuntimeError("git push falhou: " + (r.stderr or "").strip()[-300:])
+        raise RuntimeError("git push falhou: " + (r.stderr or "").replace(REMOTO, "<remoto>").strip()[-300:])
 
 
 def main() -> int:
