@@ -112,6 +112,9 @@ def estoque():
 
 
 exigir_senha()
+if FONTE == "sample":
+    st.warning("Dados FICTÍCIOS de demonstração. Para ver as vendas reais, cadastre PAINEL_DATA_URL e "
+               "PAINEL_DATA_KEY em Settings > Secrets do app.")
 
 hoje = date.today()
 snap = None
