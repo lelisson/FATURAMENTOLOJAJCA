@@ -36,10 +36,16 @@ jobs:
       - run: pip install httpx python-dotenv cryptography
 
       # consumidor_final de cada pedido (ConsultarPedido); sem o cache a Omie bloqueia por excesso de chamadas
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         with:
           path: backend/data/cache_pedidos.json
           key: pedidos-${{ github.run_id }}
           restore-keys: pedidos-
 
       - run: python scripts/publicar_dados.py
+
+      - uses: actions/cache/save@v4
+        if: always() && hashFiles('backend/data/cache_pedidos.json') != ''
+        with:
+          path: backend/data/cache_pedidos.json
+          key: pedidos-${{ github.run_id }}
