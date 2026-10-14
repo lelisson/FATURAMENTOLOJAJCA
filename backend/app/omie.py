@@ -51,6 +51,10 @@ class OmieBloqueada(RuntimeError):
 
 _bloqueado_ate: dict[str, float] = {}
 
+# IPv4: em redes sem rota IPv6 a conexão fica pendurada até o timeout em cada tentativa.
+_http = httpx.Client(transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+                     timeout=httpx.Timeout(120, connect=15))
+
 
 def _post(call: str, endpoint: str, param: dict, tentativas: int = 3) -> dict:
     if call not in READ_ONLY_CALLS:
@@ -67,7 +71,7 @@ def _post(call: str, endpoint: str, param: dict, tentativas: int = 3) -> dict:
     url = BASE + endpoint
     for i in range(tentativas):
         try:
-            r = httpx.post(url, json=corpo, timeout=120)
+            r = _http.post(url, json=corpo)
         except httpx.HTTPError:
             if i == tentativas - 1:
                 raise

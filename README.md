@@ -68,7 +68,8 @@ Também por URL: `http://localhost:8000/api/relatorio?inicio=2026-09-01&fim=2026
 `streamlit_app.py` mostra o mesmo painel (`frontend/index.html` com os dados embutidos), com seletor de período e botão para baixar o relatório HTML.
 
 - Local: `streamlit run streamlit_app.py` (usa o `.env`).
-- Streamlit Community Cloud: arquivo principal `streamlit_app.py`; credenciais em **Settings > Secrets** no formato de `.streamlit/secrets.toml.example`. `APP_PASSWORD` (opcional) pede senha para abrir.
+- Streamlit Community Cloud: arquivo principal `streamlit_app.py`; configuração em **Settings > Secrets** no formato de `.streamlit/secrets.toml.example`. `APP_PASSWORD` (opcional) pede senha para abrir.
+- **Modo recomendado (só visualização):** o PC roda `scripts/publicar_dados.py` a cada 30 min (tarefa agendada "PainelOmie - Publicar dados"). Ele consulta a Omie com as chaves locais, criptografa os dados (Fernet, `PAINEL_DATA_KEY`) e sobrescreve `painel.enc` no branch `dados`. O Streamlit recebe só `PAINEL_DATA_URL` e `PAINEL_DATA_KEY`; as chaves da Omie nunca saem do PC. Log em `%USERPROFILE%\.painel-omie\publicar.log`.
 - Sem credenciais, o app abre com `backend/data/vendas_demo.json` (dados fictícios, gerados por `scripts/gerar_demo.py`).
 - Teste rápido: `python scripts/testar_streamlit.py`.
 

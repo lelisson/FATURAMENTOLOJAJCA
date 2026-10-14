@@ -1,4 +1,8 @@
-"""Executa o streamlit_app.py com dados fictícios (sem chaves) e verifica se o painel é montado."""
+"""Executa o streamlit_app.py e verifica se o painel é montado.
+
+Uso: python scripts/testar_streamlit.py            (dados fictícios, sem chaves)
+     python scripts/testar_streamlit.py snapshot   (dados publicados no GitHub, usa PAINEL_DATA_* do .env)
+"""
 import os
 import sys
 from pathlib import Path
@@ -8,6 +12,8 @@ os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 os.environ["OMIE_APP_KEY"] = ""
 os.environ["OMIE_APP_SECRET"] = ""
+if "snapshot" not in sys.argv:
+    os.environ["PAINEL_DATA_URL"] = ""
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
