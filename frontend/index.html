@@ -355,8 +355,8 @@ function serieMeses(rows,f){
 }
 function prevSel(canal=true){return (S?S.prev:[]).filter(r=>(!canal||st.ch==='all'||r.ch===st.ch)&&(st.fam==='all'||r.f===st.fam)&&(st.cli==='all'||r.c===st.cli))}
 function sel(o={}){const {month=true,canal=true}=o;return R.filter(r=>(!month||st.m==='all'||mes(r)===st.m)&&(!canal||st.ch==='all'||r.ch===st.ch)&&(st.fam==='all'||r.f===st.fam)&&(st.cli==='all'||r.c===st.cli))}
-function agg(rows){const s=new Set();let t=0;rows.forEach(r=>{s.add(r.v);t+=r.x});return{t,n:s.size,items:rows.length,tk:s.size?t/s.size:0}}
-function gb(rows,k){const m=new Map();rows.forEach(r=>{const key=typeof k==='function'?k(r):r[k];let o=m.get(key);if(!o){o={k:key,t:0,items:0,vs:new Set()};m.set(key,o)}o.t+=r.x;o.items++;o.vs.add(r.v)});return [...m.values()].map(o=>({...o,n:o.vs.size}))}
+function agg(rows){const s=new Set();let t=0,dv=0,items=0;rows.forEach(r=>{t+=r.x;if(r.dv)dv-=r.x;else{s.add(r.v);items++}});return{t,dv,bruto:t+dv,n:s.size,items,tk:s.size?t/s.size:0}}
+function gb(rows,k){const m=new Map();rows.forEach(r=>{const key=typeof k==='function'?k(r):r[k];let o=m.get(key);if(!o){o={k:key,t:0,dv:0,items:0,vs:new Set()};m.set(key,o)}o.t+=r.x;if(r.dv)o.dv-=r.x;else{o.items++;o.vs.add(r.v)}});return [...m.values()].map(o=>({...o,n:o.vs.size}))}
 function wkStart(s){const [y,m,d]=s.split('-').map(Number);const t=new Date(Date.UTC(y,m-1,d));t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7));return t.toISOString().slice(0,10)}
 
 /* ---------- charts ---------- */
@@ -409,7 +409,7 @@ function renderKPIs(){
   const nm=st.m==='all'?Math.max(PER.meses.length,1):1;
   const card=(id,l,v,n,d)=>`<div class="card kpi"><div class="kpi-h"><span class="lab">${l}</span>${badge(d)}</div><div class="val">${v}</div><div class="note">${n}</div><canvas class="spark" id="${id}"></canvas></div>`;
   $('kpis').innerHTML=
-    card('spT','Faturamento',brl(a.t),ref||(st.m==='all'?`média ${brk(a.t/nm)}/mês`:''),dl.t)+
+    card('spT',a.dv?'Faturamento líquido':'Faturamento',brl(a.t),[a.dv?`bruto ${brk(a.bruto)} · devoluções −${brk(a.dv)}`:'',ref||(st.m==='all'?`média ${brk(a.t/nm)}/mês`:'')].filter(Boolean).join(' · '),dl.t)+
     card('spN','Vendas',num(a.n),ref,dl.n)+
     card('spK','Ticket médio',brl(a.tk),ref,dl.tk)+
     card('spI','Itens faturados',num(a.items),ref,dl.items);
@@ -430,9 +430,10 @@ function renderEvo(){
   const D=sel({month:false}),ms=PER.meses,c1=css('--c1');
   const M=ms.map(m=>({m,...agg(D.filter(r=>mes(r)===m))}));
   const linhas=cmpPrev()?[{m:S.prev_inicio.slice(5,7),nome:S.prev_label,...agg(prevSel())},...M]:M;
-  $('tMes').innerHTML='<thead><tr><th>Mês</th><th class="num">Faturamento</th><th class="num">Vendas</th><th class="num">Ticket</th><th class="num">Var.</th></tr></thead><tbody>'+
-    linhas.map((x,i)=>`<tr><td>${x.nome?x.nome[0].toUpperCase()+x.nome.slice(1)+' (anterior)':lblM(x.m)}</td><td class="num">${brl(x.t)}</td><td class="num">${num(x.n)}</td><td class="num">${brl(x.tk)}</td><td class="num">${i?vrTxt(vr(x.t,linhas[i-1].t)):'—'}</td></tr>`).join('')+
-    (cmpPrev()?'':`<tr class="sub-row"><td>Total</td><td class="num">${brl(agg(D).t)}</td><td class="num">${num(agg(D).n)}</td><td class="num">${brl(agg(D).tk)}</td><td class="num"></td></tr>`)+'</tbody>';
+  const temDv=linhas.some(x=>x.dv)||agg(D).dv>0,dvTd=x=>temDv?`<td class="num">${x.dv?'−'+brl(x.dv):'—'}</td>`:'';
+  $('tMes').innerHTML=`<thead><tr><th>Mês</th><th class="num">${temDv?'Fat. líquido':'Faturamento'}</th>${temDv?'<th class="num">Devoluções</th>':''}<th class="num">Vendas</th><th class="num">Ticket</th><th class="num">Var.</th></tr></thead><tbody>`+
+    linhas.map((x,i)=>`<tr><td>${x.nome?x.nome[0].toUpperCase()+x.nome.slice(1)+' (anterior)':lblM(x.m)}</td><td class="num">${brl(x.t)}</td>${dvTd(x)}<td class="num">${num(x.n)}</td><td class="num">${brl(x.tk)}</td><td class="num">${i?vrTxt(vr(x.t,linhas[i-1].t)):'—'}</td></tr>`).join('')+
+    (cmpPrev()?'':`<tr class="sub-row"><td>Total</td><td class="num">${brl(agg(D).t)}</td>${dvTd(agg(D))}<td class="num">${num(agg(D).n)}</td><td class="num">${brl(agg(D).tk)}</td><td class="num"></td></tr>`)+'</tbody>';
   $('tMes').querySelectorAll('th').forEach(t=>t.style.cursor='default');
   const fimMes=new Date(Date.UTC(+PER.fim.slice(0,4),+PER.fim.slice(5,7),0)).toISOString().slice(0,10);
   const completos=PER.fim<fimMes?M.slice(0,-1):M;
@@ -445,7 +446,7 @@ function renderEvo(){
   }else if(st.evo==='d'){
     const G=new Map(gb(D,'d').map(x=>[x.k,x])),dd=[];
     for(let t=Date.parse(PER.inicio);t<=Date.parse(PER.fim);t+=864e5)dd.push(new Date(t).toISOString().slice(0,10));
-    const V=dd.map(d=>G.get(d)||{k:d,t:0,n:0}),mx=Math.max(...V.map(x=>x.t)),ativos=V.filter(x=>x.t>0);
+    const V=dd.map(d=>G.get(d)||{k:d,t:0,n:0}),mx=Math.max(...V.map(x=>x.t)),ativos=V.filter(x=>x.n>0);
     $('evoT').textContent='Faturamento por dia';
     mk('cEvo',{type:'bar',data:{labels:dd.map(dm),datasets:[{data:V.map(x=>x.t),backgroundColor:V.map(x=>x.t===mx?c1:c1+'77'),borderRadius:4,borderSkipped:false,maxBarThickness:22}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>dbr(dd[i[0].dataIndex]),label:c=>' '+brl(c.parsed.y),afterLabel:c=>` ${num(V[c.dataIndex].n)} vendas`}}},scales:axes(false)}});
@@ -546,7 +547,7 @@ function renderOport(){
   tstate.tCliParou??={k:'t',dir:-1};tstate.tProdQueda??={k:'tp',dir:-1};tstate.tParado??={k:'custo',dir:-1};
   $('opSub').textContent=`${dbr(CUR.inicio)} a ${dbr(CUR.fim)} × ${dbr(PREV.inicio)} a ${dbr(PREV.fim)}`;
   const cliAtual=new Set(R.map(r=>r.c));
-  const ult=(rows,k,key)=>rows.filter(r=>key(r)===k).reduce((m,r)=>r.d>m?r.d:m,'');
+  const ult=(rows,k,key)=>rows.filter(r=>!r.dv&&key(r)===k).reduce((m,r)=>r.d>m?r.d:m,'');
   const parou=gb(RP.filter(r=>r.c!==ANON&&!cliAtual.has(r.c)),'c').map(x=>({...x,ult:ult(RP,x.k,r=>r.c)}));
   table('tCliParou',[{k:'k',l:'Cliente',wrap:1},{k:'t',l:'Comprou no '+LBL.ant,num:1,f:brl},{k:'n',l:'Vendas',num:1,f:num},{k:'ult',l:'Última compra',f:dbr}],parou);
   const nome=new Map();[...RP,...R].forEach(r=>{if(!nome.has(chaveP(r)))nome.set(chaveP(r),{p:r.p,f:r.f})});

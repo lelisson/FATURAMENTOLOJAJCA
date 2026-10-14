@@ -33,6 +33,15 @@ EP_ESTOQUE = "/estoque/consulta/"
 # Operações que não entram no faturamento de vendas (remessa etc.)
 OP_EXCLUIDAS = frozenset({"14", "16", "24", "04"})
 
+# Itens de NF de saída que não são venda: transferências e devoluções (de transferência ou de compra)
+CFOP_SAIDA_NAO_VENDA = frozenset({
+    "5151", "5152", "5155", "5156", "6151", "6152", "6155", "6156",
+    "5201", "5202", "5208", "5209", "5210", "5410", "5411", "5409",
+    "6201", "6202", "6208", "6209", "6210", "6410", "6411", "6409",
+})
+# NF de entrada de devolução de venda: abate o faturamento na data da devolução
+CFOP_DEVOLUCAO_VENDA = frozenset({"1201", "1202", "1410", "1411", "2201", "2202", "2410", "2411"})
+
 POR_PAGINA_NF = 50
 POR_PAGINA_CUPOM = 100
 
@@ -211,7 +220,19 @@ def _paginar(call: str, endpoint: str, param, lista: str, total_paginas: str) ->
     return out
 
 
-def listar_nf_bruto(inicio: str, fim: str) -> list[dict]:
+def _cfop(pr: dict) -> str:
+    return re.sub(r"\D", "", str(pr.get("CFOP") or ""))
+
+
+def _valor_item(pr: dict) -> float:
+    # vTotItem do Omie vem bruto (sem abater vDesc); o relatório de faturamento usa o líquido
+    return (
+        _f(pr.get("vProd")) - _f(pr.get("vDesc"))
+        + _f(pr.get("vFrete")) + _f(pr.get("vSeg")) + _f(pr.get("vOutro"))
+    )
+
+
+def listar_nf_bruto(inicio: str, fim: str, tp_nf: str = "1") -> list[dict]:
     return _paginar(
         "ListarNF",
         EP_NF,
@@ -222,7 +243,7 @@ def listar_nf_bruto(inicio: str, fim: str) -> list[dict]:
             "cDetalhesPedido": "S",
             "dEmiInicial": _br(inicio),
             "dEmiFinal": _br(fim),
-            "tpNF": "1",
+            "tpNF": tp_nf,
         },
         "nfCadastro",
         "total_de_paginas",
@@ -250,8 +271,9 @@ def mapear_nf(nf: dict, pedidos: _CachePedidos) -> list[dict]:
     op = _codigo_operacao(nf)
     if op in OP_EXCLUIDAS:
         return []
+    # Pedido devolvido continua como venda no mês dele; a NF de devolução abate no mês da devolução.
     ped = nf.get("pedido") or {}
-    if _sim(ped.get("cCancelado")) or _sim(ped.get("cDevolvido")):
+    if _sim(ped.get("cCancelado")):
         return []
 
     ide = nf.get("ide") or {}
@@ -268,18 +290,41 @@ def mapear_nf(nf: dict, pedidos: _CachePedidos) -> list[dict]:
     for det in nf.get("det") or []:
         pr = det.get("prod") or {}
         produto = _texto(pr.get("xProd") or pr.get("cProd") or "")
-        if not produto:
+        if not produto or _cfop(pr) in CFOP_SAIDA_NAO_VENDA:
             continue
-        # vTotItem do Omie vem bruto (sem abater vDesc); o relatório de faturamento usa o líquido
-        valor = (
-            _f(pr.get("vProd")) - _f(pr.get("vDesc"))
-            + _f(pr.get("vFrete")) + _f(pr.get("vSeg")) + _f(pr.get("vOutro"))
-        )
+        valor = _valor_item(pr)
         if valor <= 0:
             continue
         linhas.append(
             T.linha(data_iso, nf_num, "Ped", cliente, produto, valor, False, consumo, pr.get("cProd"))
         )
+    return linhas
+
+
+def mapear_devolucao(nf: dict, canal_cliente: dict[str, tuple[bool, bool]]) -> list[dict]:
+    """Itens de devolução de venda viram linhas negativas na data de emissão da NF de devolução."""
+    if _cancelada_nf(nf):
+        return []
+    ide = nf.get("ide") or {}
+    data_iso = _iso_br(str(ide.get("dEmi") or ""))
+    if not data_iso:
+        return []
+    nf_num = ide.get("nNF") or "0"
+    cliente = _cliente_nf(nf)
+    is_pdv, consumo = canal_cliente.get(cliente or T.ANON, (not cliente, False))
+
+    linhas: list[dict] = []
+    for det in nf.get("det") or []:
+        pr = det.get("prod") or {}
+        if _cfop(pr) not in CFOP_DEVOLUCAO_VENDA:
+            continue
+        produto = _texto(pr.get("xProd") or pr.get("cProd") or "")
+        valor = _valor_item(pr)
+        if not produto or valor <= 0:
+            continue
+        r = T.linha(data_iso, nf_num, "Dev", cliente, produto, -valor, is_pdv, consumo, pr.get("cProd"))
+        r["dv"] = 1
+        linhas.append(r)
     return linhas
 
 
@@ -310,16 +355,24 @@ def mapear_cupom(cupom: dict) -> list[dict]:
 
 def vendas(inicio: str, fim: str) -> list[dict]:
     pedidos = _CachePedidos()
+    # Saídas e entradas em sequência: ListarNF aceita no máximo 4 chamadas simultâneas.
+    def _nfs() -> tuple[list[dict], list[dict]]:
+        return listar_nf_bruto(inicio, fim, "1"), listar_nf_bruto(inicio, fim, "0")
+
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_nf = ex.submit(listar_nf_bruto, inicio, fim)
+        f_nf = ex.submit(_nfs)
         f_cup = ex.submit(listar_cupons_bruto, inicio, fim)
-        nfs, cupons = f_nf.result(), f_cup.result()
+        (nfs, entradas), cupons = f_nf.result(), f_cup.result()
     pedidos.carregar({int((nf.get("compl") or {}).get("nIdPedido") or 0) for nf in nfs})
     out: list[dict] = []
     for nf in nfs:
         out.extend(mapear_nf(nf, pedidos))
     for cupom in cupons:
         out.extend(mapear_cupom(cupom))
+    canal_cliente = {r["c"]: (r["ch"] == "PDV", r["ch"] == "Pedido – consumo final")
+                     for r in sorted(out, key=lambda r: r["d"])}
+    for nf in entradas:
+        out.extend(mapear_devolucao(nf, canal_cliente))
     return out
 
 

@@ -72,9 +72,11 @@ def periodo_comparacao(inicio: str, fim: str) -> tuple[str, str]:
 
 # ---------- agregação ----------
 def agg(rows):
-    vs = {r["v"] for r in rows}
+    vendas = [r for r in rows if not r.get("dv")]
+    vs = {r["v"] for r in vendas}
     t = sum(r["x"] for r in rows)
-    return {"t": t, "n": len(vs), "items": len(rows), "tk": t / len(vs) if vs else 0}
+    dv = -sum(r["x"] for r in rows if r.get("dv"))
+    return {"t": t, "dv": dv, "bruto": t + dv, "n": len(vs), "items": len(vendas), "tk": t / len(vs) if vs else 0}
 
 
 def por(rows, chave):
@@ -82,8 +84,9 @@ def por(rows, chave):
     for r in rows:
         o = g[chave(r) if callable(chave) else r[chave]]
         o["t"] += r["x"]
-        o["items"] += 1
-        o["vs"].add(r["v"])
+        if not r.get("dv"):
+            o["items"] += 1
+            o["vs"].add(r["v"])
     return {k: {"t": o["t"], "items": o["items"], "n": len(o["vs"])} for k, o in g.items()}
 
 
@@ -174,12 +177,12 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
     clis = sorted(cli.items(), key=lambda kv: -kv[1]["t"])
     top5 = sum(o["t"] for _, o in clis[:5])
     melhor_dia = max(dia.items(), key=lambda kv: kv[1]["t"]) if dia else None
-    dias_venda = len(dia)
+    dias_venda = sum(1 for o in dia.values() if o["n"])
     perdidos = sorted(((k, o) for k, o in cli_p.items() if k not in cli), key=lambda kv: -kv[1]["t"])
     novos = [k for k in cli if k not in cli_p]
     ult_compra = {}
     for r in rows_prev:
-        if r["c"] in cli_p and r["d"] > ult_compra.get(r["c"], ""):
+        if not r.get("dv") and r["c"] in cli_p and r["d"] > ult_compra.get(r["c"], ""):
             ult_compra[r["c"]] = r["d"]
 
     # destaques
@@ -190,6 +193,8 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
                  f'em relação a {titulo_prev.lower() if titulo_prev[0].isalpha() else titulo_prev} ({brl(P["t"])}).')
     else:
         d.append(f'Faturamento de <b>{brl(A["t"])}</b> no período.')
+    if A["dv"]:
+        d.append(f'Faturamento líquido de devoluções: bruto de {brl(A["bruto"])} menos <b>{brl(A["dv"])}</b> devolvidos no período.')
     tv = var(A["tk"], P["tk"])
     d.append(f'<b>{num(A["n"])}</b> vendas com ticket médio de <b>{brl(A["tk"])}</b>'
              + (f' ({"+" if tv >= 0 else "−"}{pct(abs(tv))}).' if tv is not None else '.'))
@@ -212,7 +217,7 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
         return (f'<div class="kpi"><div class="kl">{l}</div><div class="kv">{v}</div>'
                 f'<div class="kd">{var_html(var(a, b))}<span>{comp}</span></div><div class="kp">anterior: {fmt(b)}</div></div>')
 
-    kpis = (kpi("Faturamento", brl(A["t"]), A["t"], P["t"], brl)
+    kpis = (kpi("Faturamento líquido" if A["dv"] else "Faturamento", brl(A["t"]), A["t"], P["t"], brl)
             + kpi("Vendas", num(A["n"]), A["n"], P["n"], num)
             + kpi("Ticket médio", brl(A["tk"]), A["tk"], P["tk"], brl)
             + kpi("Itens faturados", num(A["items"]), A["items"], P["items"], num))

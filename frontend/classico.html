@@ -217,8 +217,8 @@ const dm=s=>s.slice(8,10)+'/'+s.slice(5,7);
 const vr=(a,b)=>b?(a/b-1):null;
 const vrTxt=v=>v===null?'—':`<span class="${v>=0?'up':'dn'}">${v>=0?'▲':'▼'} ${pct(Math.abs(v))}</span>`;
 function sel(o={}){const {month=true,canal=true}=o;return R.filter(r=>(!month||st.m==='all'||r.d.slice(5,7)===st.m)&&(!canal||st.ch==='all'||r.ch===st.ch)&&(st.fam==='all'||r.f===st.fam)&&(st.cli==='all'||r.c===st.cli))}
-function agg(rows){const s=new Set();let t=0;rows.forEach(r=>{s.add(r.v);t+=r.x});return{t,n:s.size,items:rows.length,tk:s.size?t/s.size:0}}
-function gb(rows,k){const m=new Map();rows.forEach(r=>{const key=typeof k==='function'?k(r):r[k];let o=m.get(key);if(!o){o={k:key,t:0,items:0,vs:new Set()};m.set(key,o)}o.t+=r.x;o.items++;o.vs.add(r.v)});return [...m.values()].map(o=>({...o,n:o.vs.size}))}
+function agg(rows){const s=new Set();let t=0;let it=0;rows.forEach(r=>{t+=r.x;if(!r.dv){s.add(r.v);it++}});return{t,n:s.size,items:it,tk:s.size?t/s.size:0}}
+function gb(rows,k){const m=new Map();rows.forEach(r=>{const key=typeof k==='function'?k(r):r[k];let o=m.get(key);if(!o){o={k:key,t:0,items:0,vs:new Set()};m.set(key,o)}o.t+=r.x;if(!r.dv){o.items++;o.vs.add(r.v)}});return [...m.values()].map(o=>({...o,n:o.vs.size}))}
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const charts={};
 function mk(id,cfg){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg)}

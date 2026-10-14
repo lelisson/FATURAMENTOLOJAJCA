@@ -18,8 +18,14 @@ if "snapshot" not in sys.argv:
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 at = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=120).run()
+if at.text_input and os.getenv("APP_PASSWORD"):
+    at.text_input[0].input(os.environ["APP_PASSWORD"])
+    at.button[0].click().run()
 assert not at.exception, at.exception
 html = [e for e in at.get("iframe")] or [e for e in at.get("html")]
 print("exceções:", len(at.exception))
 print("legenda:", [c.value for c in at.caption])
 print("componentes de html:", len(html))
+print("erros:", [e.value for e in at.error])
+print("avisos:", [e.value for e in at.warning])
+print("campos de texto:", len(at.text_input))
