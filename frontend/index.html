@@ -73,6 +73,8 @@ section{padding-top:28px;display:flex;flex-direction:column;gap:14px}
 .muted{color:var(--ink3);font-size:12.5px}
 .grid{display:grid;gap:14px;min-width:0}
 .g4{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+.g4.k5{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
+.k5 .badge{white-space:nowrap}
 .g3{grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
 .g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
 .g21{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
@@ -276,12 +278,14 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
           <button type="button" aria-selected="true" data-pane="dProd">Produtos</button>
           <button type="button" aria-selected="false" data-pane="dCli">Clientes</button>
           <button type="button" aria-selected="false" data-pane="dRaw">Itens faturados</button>
+          <button type="button" aria-selected="false" data-pane="dDev" id="tabDev" hidden>Devoluções</button>
         </div>
         <input class="search" id="q" type="search" placeholder="Buscar cliente, produto ou NF" aria-label="Buscar">
       </div>
       <div class="tw" id="dProd"><table id="tProd"></table></div>
       <div class="tw" id="dCli" hidden><table id="tCli"></table></div>
       <div class="tw" id="dRaw" hidden><table id="tRaw"></table></div>
+      <div class="tw" id="dDev" hidden><table id="tDev"></table></div>
     </div>
   </section>
 </div>
@@ -408,11 +412,14 @@ function renderKPIs(){
   const W=gb(D,r=>wkStart(r.d)).sort((x,y)=>x.k<y.k?-1:1);
   const nm=st.m==='all'?Math.max(PER.meses.length,1):1;
   const card=(id,l,v,n,d)=>`<div class="card kpi"><div class="kpi-h"><span class="lab">${l}</span>${badge(d)}</div><div class="val">${v}</div><div class="note">${n}</div><canvas class="spark" id="${id}"></canvas></div>`;
+  $('kpis').classList.toggle('k5',a.dv>0);
   $('kpis').innerHTML=
-    card('spT',a.dv?'Faturamento líquido':'Faturamento',brl(a.t),[a.dv?`bruto ${brk(a.bruto)} · devoluções −${brk(a.dv)}`:'',ref||(st.m==='all'?`média ${brk(a.t/nm)}/mês`:'')].filter(Boolean).join(' · '),dl.t)+
+    card('spT',a.dv?'Faturamento líquido':'Faturamento',brl(a.t),[a.dv?`bruto ${brk(a.bruto)}`:'',ref||(st.m==='all'?`média ${brk(a.t/nm)}/mês`:'')].filter(Boolean).join(' · '),dl.t)+
     card('spN','Vendas',num(a.n),ref,dl.n)+
     card('spK','Ticket médio',brl(a.tk),ref,dl.tk)+
-    card('spI','Itens faturados',num(a.items),ref,dl.items);
+    card('spI','Itens faturados',num(a.items),ref,dl.items)+
+    (a.dv?(()=>{const R=D.filter(r=>r.dv),nNf=new Set(R.map(r=>r.v)).size,nCli=new Set(R.map(r=>r.c)).size;
+      return `<div class="card kpi flat"><span class="lab">Devoluções</span><div class="val dn">−${brl(a.dv)}</div><div class="note">${num(nNf)} ${nNf>1?'notas':'nota'} · ${num(nCli)} ${nCli>1?'clientes':'cliente'} · ${pct(a.dv/a.bruto)} do bruto</div></div>`})():'');
   const c=cols();
   spark('spT',W.map(w=>w.t),c[0]);spark('spN',W.map(w=>w.n),c[1]);spark('spK',W.map(w=>w.n?w.t/w.n:0),c[2]);spark('spI',W.map(w=>w.items),c[0]);
   const p=gb(D,'p').sort((x,y)=>y.t-x.t)[0],cl=gb(D.filter(r=>r.c!==ANON),'c').sort((x,y)=>y.t-x.t)[0],f=gb(D,'f').sort((x,y)=>y.t-x.t)[0];
@@ -529,10 +536,17 @@ function renderTables(){
   tstate.tProd??={k:'t',dir:-1};tstate.tCli??={k:'t',dir:-1};tstate.tRaw??={k:'d',dir:-1};
   table('tProd',[{k:'k',l:'Produto',wrap:1},{k:'fam',l:'Família'},{k:'items',l:'Itens',num:1,f:num},{k:'t',l:'Faturamento',num:1,f:brl},{k:'sh',l:'Part.',num:1,f:v=>pct(v)}],
     gb(D,'p').map(x=>({...x,fam:D.find(r=>r.p===x.k).f,sh:tot?x.t/tot:0})));
+  const neg=v=>v?'<span class="dn">−'+brl(v)+'</span>':'—';
   const colsCli=[{k:'k',l:'Cliente',wrap:1},{k:'n',l:'Vendas',num:1,f:num},{k:'t',l:'Faturamento',num:1,f:brl},{k:'sh',l:'Part.',num:1,f:v=>pct(v)}];
+  if(agg(D).dv)colsCli.splice(3,0,{k:'dv',l:'Devoluções',num:1,f:neg});
   PER.meses.forEach(m=>colsCli.push({k:'m'+m,l:lblMs(m),num:1,f:brl}));
   table('tCli',colsCli,gb(D,'c').map(x=>{const row={...x,sh:tot?x.t/tot:0};PER.meses.forEach(m=>{row['m'+m]=agg(D.filter(r=>r.c===x.k&&mes(r)===m)).t});return row}));
   table('tRaw',[{k:'d',l:'Data',f:dbr},{k:'nf',l:'NF'},{k:'c',l:'Cliente',wrap:1},{k:'ch',l:'Canal',f:v=>CHN[v]||v},{k:'p',l:'Produto',wrap:1},{k:'x',l:'Valor',num:1,f:brl}],D);
+  const dev=gb(D.filter(r=>r.dv),'v').map(x=>{const R=D.filter(r=>r.v===x.k);return{d:R[0].d,nf:R[0].nf,c:R[0].c,ch:R[0].ch,p:[...new Set(R.map(r=>r.p))].join(', '),dv:x.dv}});
+  table('tDev',[{k:'d',l:'Data devolução',f:dbr},{k:'nf',l:'NF devolução'},{k:'c',l:'Cliente',wrap:1},{k:'ch',l:'Canal',f:v=>CHN[v]||v},{k:'p',l:'Produtos',wrap:1},{k:'dv',l:'Valor',num:1,f:neg}],dev);
+  const temDev=sel().some(r=>r.dv),tab=$('tabDev');
+  tab.hidden=!temDev;
+  if(!temDev&&tab.getAttribute('aria-selected')==='true')tab.parentElement.firstElementChild.click();
 }
 
 /* ---------- oportunidades ---------- */
