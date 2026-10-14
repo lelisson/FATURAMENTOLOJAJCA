@@ -1,0 +1,449 @@
+<title>Painel de Vendas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Layout: cabeçalho fixo com filtros, faixa de indicadores, seções de análise em grade, tabelas ordenáveis no fim. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --ink:#142033; --ink2:#4a5568; --ink3:#6b7686; --line:#dde2ea; --grid:#e8ecf2;
+  --accent:#1f4e8c; --accent-ink:#ffffff; --chip:#e8eef7;
+  --seq:#2f4b7c; --seq-hi:#c2410c;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#12703f; --bad:#b42318; --warn-bg:#fff6e5; --warn-line:#f0d49a;
+  --font:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161d; --surface:#1a1f28; --ink:#e8ecf2; --ink2:#b4bdca; --ink3:#8f99a8; --line:#2b3340; --grid:#242b36;
+  --accent:#7ea6e0; --accent-ink:#0f1722; --chip:#232c3a;
+  --seq:#8fb0e8; --seq-hi:#f0914f;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --good:#5fd09a; --bad:#ff8a7a; --warn-bg:#2a2314; --warn-line:#5a4a1f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161d; --surface:#1a1f28; --ink:#e8ecf2; --ink2:#b4bdca; --ink3:#8f99a8; --line:#2b3340; --grid:#242b36;
+  --accent:#7ea6e0; --accent-ink:#0f1722; --chip:#232c3a;
+  --seq:#8fb0e8; --seq-hi:#f0914f;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --good:#5fd09a; --bad:#ff8a7a; --warn-bg:#2a2314; --warn-line:#5a4a1f; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2,h3{margin:0;text-wrap:balance}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);padding-block:14px 10px;border-bottom:1px solid var(--line);margin-inline:-16px;padding-inline:16px}
+.top-in{max-width:1240px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.filters{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;color:var(--ink2);font:inherit;font-weight:500;padding:6px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+select,.btn{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 10px;max-width:100%}
+select{max-width:210px}
+.btn{cursor:pointer;color:var(--ink2)}
+button:focus-visible,select:focus-visible,th[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{display:flex;flex-direction:column;gap:28px;padding-top:20px}
+section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.sec-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 16px}
+h2{font-size:17px;font-weight:700}
+.sub{color:var(--ink3);font-size:12.5px}
+.grid{display:grid;gap:14px;min-width:0}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.kpi .lab{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+.kpi .val{font-size:26px;font-weight:700;letter-spacing:-.015em;margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kpi .val.sm{font-size:16px;line-height:1.3;margin-top:8px}
+.kpi .note{font-size:12.5px;color:var(--ink2);margin-top:4px;font-variant-numeric:tabular-nums}
+.card h3{font-size:14px;font-weight:600;margin-bottom:2px}
+.card .sub{margin-bottom:10px}
+.chart{position:relative;height:300px}
+.chart.tall{height:380px}
+.tog{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.callouts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.pill{font-size:12.5px;background:var(--chip);color:var(--ink);border-radius:999px;padding:4px 12px;font-variant-numeric:tabular-nums}
+.pill b{font-weight:600}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.tw.scroll{max-height:460px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+td.wrapc{white-space:normal;min-width:200px}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:600;background:var(--surface);position:sticky;top:0;cursor:pointer;user-select:none}
+th.num,td.num{text-align:right}
+th[aria-sort="ascending"]::after{content:" ▲";font-size:9px}
+th[aria-sort="descending"]::after{content:" ▼";font-size:9px}
+tr:last-child td{border-bottom:0}
+tr.sub-row td{font-weight:600;background:var(--chip)}
+.up{color:var(--good)} .dn{color:var(--bad)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:-1px}
+.panel-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;margin:8px 0 14px}
+.panel-k .lab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-weight:600}
+.panel-k .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.mini{height:160px;position:relative;margin-bottom:12px}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;font-size:12.5px;margin-bottom:8px}
+.hb .bar{grid-column:1/-1;height:6px;background:var(--grid);border-radius:3px;overflow:hidden}
+.hb .bar i{display:block;height:100%;background:var(--seq);border-radius:3px}
+.hb span:first-child{overflow-wrap:anywhere}
+.hb span:nth-child(2){font-variant-numeric:tabular-nums;color:var(--ink2)}
+.sug{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr))}
+.sug .card h3{font-size:14.5px;margin-bottom:8px}
+.sug dl{margin:0;display:grid;gap:8px}
+.sug dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);font-weight:600}
+.sug dd{margin:0}
+.notes{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;padding:14px 16px}
+.notes ul{margin:6px 0 0;padding-left:18px;display:grid;gap:4px}
+.summary{background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:18px 20px}
+.summary h2{color:inherit;margin-bottom:8px}
+.summary ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.empty{color:var(--ink3);padding:20px;text-align:center}
+@media (max-width:560px){.kpi .val{font-size:22px}h1{font-size:19px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="top"><div class="top-in">
+  <div><div class="eyebrow" id="eyebrow">Faturamento</div><h1 id="titulo">Painel de Vendas</h1></div>
+  <div class="filters" role="group" aria-label="Filtros">
+    <div class="seg" id="fm" role="group" aria-label="Mês"></div>
+    <select id="fc" aria-label="Canal"></select>
+    <select id="ff" aria-label="Produto (família)"></select>
+    <select id="fcl" aria-label="Cliente"></select>
+    <button class="btn" id="reset" type="button">Limpar filtros</button>
+    <form id="fPer" class="filters" style="gap:6px">
+      <label class="sub" for="pIni">De</label><input type="date" id="pIni" class="btn" required>
+      <label class="sub" for="pFim">Até</label><input type="date" id="pFim" class="btn" required>
+      <button class="btn" type="submit">Ver período</button>
+    </form>
+  </div>
+</div></header>
+
+<div class="wrap"><main>
+  <section aria-label="Indicadores"><div class="grid kpis" id="kpis"></div></section>
+
+  <section>
+    <div class="sec-h"><h2>Evolução do faturamento</h2></div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="tog"><h3 id="evoT">Faturamento por mês</h3>
+          <div class="seg" id="evoTog"><button data-v="m" aria-pressed="true">Mensal</button><button data-v="w" aria-pressed="false">Semanal</button></div></div>
+        <div class="chart"><canvas id="cEvo" role="img" aria-label="Evolução do faturamento"></canvas></div>
+        <div class="callouts" id="evoCall"></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px">Resumo por mês</h3>
+        <div class="tw"><table id="tMes"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Produtos e clientes</h2></div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="tog"><h3>Produtos mais vendidos</h3>
+          <div class="seg" id="prodTog"><button data-v="x" aria-pressed="true">Faturamento</button><button data-v="n" aria-pressed="false">Itens vendidos</button></div></div>
+        <div class="chart tall"><canvas id="cProd" role="img" aria-label="Top 10 produtos"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Clientes com maior venda</h3><div class="sub" id="cliSub"></div>
+        <div class="chart tall"><canvas id="cCli" role="img" aria-label="Top 10 clientes"></canvas></div>
+      </div>
+    </div>
+    <div class="card"><h3 style="margin-bottom:10px">Faturamento por família de produto</h3><div class="chart" style="height:280px"><canvas id="cFam" role="img" aria-label="Faturamento por família"></canvas></div></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Canais de venda</h2></div>
+    <div class="grid g2">
+      <div class="card"><h3 style="margin-bottom:10px">Faturamento mensal por canal</h3><div class="chart"><canvas id="cCan" role="img" aria-label="Faturamento mensal por canal"></canvas></div></div>
+      <div class="card"><h3 style="margin-bottom:10px">Participação, ticket e crescimento</h3><div class="tw"><table id="tCan"></table></div></div>
+    </div>
+    <div class="grid g2" id="panels"></div>
+  </section>
+
+  <section id="secOport" hidden>
+    <div class="sec-h"><h2>Oportunidades</h2><span class="sub" id="opSub"></span></div>
+    <div class="grid kpis" id="opKpis"></div>
+    <h3>Clientes sem compra no trimestre</h3>
+    <div class="tw scroll"><table id="tCliParou"></table></div>
+    <h3>Produtos em queda</h3>
+    <div class="tw scroll"><table id="tProdQueda"></table></div>
+    <h3>Estoque sem giro</h3>
+    <div class="tw scroll"><table id="tParado"></table></div>
+  </section>
+
+  <section id="secSug" hidden>
+    <div class="sec-h"><h2>Sugestões estratégicas</h2></div>
+    <div class="sug" id="sug"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Detalhamento</h2></div>
+    <h3>Produtos</h3><div class="tw scroll"><table id="tProd"></table></div>
+    <h3>Clientes</h3><div class="tw scroll"><table id="tCli"></table></div>
+    <h3>Itens faturados</h3><div class="tw scroll"><table id="tRaw"></table></div>
+  </section>
+
+  <section class="summary" id="secExec" hidden><h2>Resumo executivo</h2><ol id="exec"></ol></section>
+
+  <section id="secNotes" hidden>
+    <div class="notes"><h3>Tratamento dos dados e limites da análise</h3><ul id="notes"></ul></div>
+  </section>
+</main></div>
+
+<script>
+let R=[];
+const NOMES_MES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const NOMES_CURTOS=['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+let PER={inicio:'2026-07-01',fim:'2026-09-30',meses:['07','08','09'],fonte:'sample',empresa:'JCA Filial'};
+const lblM=m=>NOMES_MES[+m]||m, lblMs=m=>NOMES_CURTOS[+m]||m;
+function mesesNoPeriodo(ini,fim){
+  const out=[];let y=+ini.slice(0,4),m=+ini.slice(5,7);const ye=+fim.slice(0,4),me=+fim.slice(5,7);
+  while(y<ye||(y===ye&&m<=me)){out.push(String(m).padStart(2,'0'));m++;if(m>12){m=1;y++}}
+  return out;
+}
+function buildMonthFilters(){
+  const fm=$('fm');fm.innerHTML='<button type="button" data-m="all" aria-pressed="'+(st.m==='all')+'">Período</button>'+
+    PER.meses.map(m=>`<button type="button" data-m="${m}" aria-pressed="${st.m===m}">${lblM(m)}</button>`).join('');
+}
+const CH=['PDV','Pedido – consumo final','Pedido – empresas'];
+const ANON='Cliente Consumidor / Sem Tomador';
+const st={m:'all',ch:'all',fam:'all',cli:'all',evo:'m',prod:'x'};
+const $=id=>document.getElementById(id);
+const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const brk=n=>n>=1000?'R$ '+(n/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil':brl(n);
+const pct=(n,d=1)=>(n*100).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%';
+const num=n=>n.toLocaleString('pt-BR');
+const dbr=s=>s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
+const dm=s=>s.slice(8,10)+'/'+s.slice(5,7);
+const vr=(a,b)=>b?(a/b-1):null;
+const vrTxt=v=>v===null?'—':`<span class="${v>=0?'up':'dn'}">${v>=0?'▲':'▼'} ${pct(Math.abs(v))}</span>`;
+function sel(o={}){const {month=true,canal=true}=o;return R.filter(r=>(!month||st.m==='all'||r.d.slice(5,7)===st.m)&&(!canal||st.ch==='all'||r.ch===st.ch)&&(st.fam==='all'||r.f===st.fam)&&(st.cli==='all'||r.c===st.cli))}
+function agg(rows){const s=new Set();let t=0;rows.forEach(r=>{s.add(r.v);t+=r.x});return{t,n:s.size,items:rows.length,tk:s.size?t/s.size:0}}
+function gb(rows,k){const m=new Map();rows.forEach(r=>{const key=typeof k==='function'?k(r):r[k];let o=m.get(key);if(!o){o={k:key,t:0,items:0,vs:new Set()};m.set(key,o)}o.t+=r.x;o.items++;o.vs.add(r.v)});return [...m.values()].map(o=>({...o,n:o.vs.size}))}
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const charts={};
+function mk(id,cfg){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg)}
+function base(){Chart.defaults.font.family=css('--font');Chart.defaults.font.size=12;Chart.defaults.color=css('--ink2');Chart.defaults.borderColor=css('--grid')}
+const ttBRL={callbacks:{label:c=>` ${c.dataset.label?c.dataset.label+': ':''}${brl(c.parsed.y??c.parsed.x)}`}};
+function axes(horiz){const g={color:css('--grid')};const m={ticks:{callback:v=>brk(v)},grid:g,border:{display:false}};const c={grid:{display:false},border:{color:css('--line')}};return horiz?{x:m,y:c}:{x:c,y:m}}
+const short=(s,n=30)=>s.length>n?s.slice(0,n-1)+'…':s;
+
+/* ---------- filtros ---------- */
+function buildFilters(){
+  $('fc').innerHTML='<option value="all">Todos os canais</option>'+CH.map(c=>`<option>${c}</option>`).join('');
+  const fams=[...new Set(R.map(r=>r.f))].sort();
+  $('ff').innerHTML='<option value="all">Todas as famílias</option>'+fams.map(c=>`<option>${c}</option>`).join('');
+  const cl=[...new Set(R.map(r=>r.c))].sort();
+  $('fcl').innerHTML='<option value="all">Todos os clientes</option>'+cl.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">${short(c,34)}</option>`).join('');
+}
+$('fm').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;st.m=b.dataset.m;[...$('fm').children].forEach(x=>x.setAttribute('aria-pressed',x===b));render()});
+$('fc').onchange=e=>{st.ch=e.target.value;render()};
+$('ff').onchange=e=>{st.fam=e.target.value;render()};
+$('fcl').onchange=e=>{st.cli=e.target.value;render()};
+$('reset').onclick=()=>{st.m='all';st.ch='all';st.fam='all';st.cli='all';$('fc').value='all';$('ff').value='all';$('fcl').value='all';[...$('fm').children].forEach(x=>x.setAttribute('aria-pressed',x.dataset.m==='all'));render()};
+$('evoTog').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;st.evo=b.dataset.v;[...$('evoTog').children].forEach(x=>x.setAttribute('aria-pressed',x===b));renderEvo()});
+$('prodTog').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;st.prod=b.dataset.v;[...$('prodTog').children].forEach(x=>x.setAttribute('aria-pressed',x===b));renderRank()});
+
+/* ---------- KPIs ---------- */
+function renderKPIs(){
+  const D=sel(),a=agg(D);
+  const p=gb(D,'p').sort((x,y)=>y.t-x.t)[0];
+  const c=gb(D.filter(r=>r.c!==ANON),'c').sort((x,y)=>y.t-x.t)[0];
+  const k=(l,v,n,sm)=>`<div class="card kpi"><div class="lab">${l}</div><div class="val ${sm?'sm':''}">${v}</div><div class="note">${n}</div></div>`;
+  $('kpis').innerHTML=
+    k('Faturamento total',brl(a.t),`${num(a.items)} itens faturados`)+
+    k('Nº de vendas',num(a.n),'')+
+    k('Ticket médio',brl(a.tk),'')+
+    k('Produto líder',p?short(p.k,38):'—',p?`${brl(p.t)} · ${pct(p.t/a.t)} do total`:'',true)+
+    k('Cliente líder',c?short(c.k,38):'—',c?`${brl(c.t)} · ${pct(c.t/a.t)} do total`:'sem cliente identificado',true);
+}
+
+/* ---------- evolução ---------- */
+function wkStart(s){const [y,m,d]=s.split('-').map(Number);const t=new Date(Date.UTC(y,m-1,d));t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7));return t.toISOString().slice(0,10)}
+function renderEvo(){
+  const D=sel({month:false});const ms=PER.meses;
+  const M=ms.map(m=>({m,...agg(D.filter(r=>r.d.slice(5,7)===m))}));
+  // tabela mensal
+  $('tMes').innerHTML='<thead><tr><th>Mês</th><th class="num">Faturamento</th><th class="num">Vendas</th><th class="num">Ticket</th><th class="num">Var.</th></tr></thead><tbody>'+
+   M.map((x,i)=>`<tr><td>${lblM(x.m)}</td><td class="num">${brl(x.t)}</td><td class="num">${num(x.n)}</td><td class="num">${brl(x.tk)}</td><td class="num">${i?vrTxt(vr(x.t,M[i-1].t)):'—'}</td></tr>`).join('')+
+   `<tr class="sub-row"><td>Total do período</td><td class="num">${brl(agg(D).t)}</td><td class="num">${num(agg(D).n)}</td><td class="num">${brl(agg(D).tk)}</td><td class="num">—</td></tr></tbody>`;
+  $('tMes').querySelectorAll('th').forEach(t=>t.style.cursor='default');
+  const bestM=[...M].sort((a,b)=>b.t-a.t)[0],worstM=[...M].sort((a,b)=>a.t-b.t)[0];
+  const hl=css('--seq-hi'),seq=css('--seq');
+  if(st.evo==='m'){
+    $('evoT').textContent='Faturamento por mês';
+    mk('cEvo',{type:'bar',data:{labels:ms.map(m=>lblM(m)),datasets:[{label:'Faturamento',data:M.map(x=>x.t),backgroundColor:M.map(x=>x===bestM?hl:seq),borderRadius:4,maxBarThickness:90}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.parsed.y),afterLabel:c=>` ${num(M[c.dataIndex].n)} vendas · ticket ${brl(M[c.dataIndex].tk)}`}}},scales:axes(false)}});
+    $('evoCall').innerHTML=`<span class="pill">Melhor mês: <b>${lblM(bestM.m)}</b> ${brl(bestM.t)}</span><span class="pill">Pior mês: <b>${lblM(worstM.m)}</b> ${brl(worstM.t)}</span>`;
+  }else{
+    const W=gb(D,r=>wkStart(r.d)).sort((a,b)=>a.k<b.k?-1:1).map(w=>({...w,part:w.k<PER.inicio||w.k>PER.fim}));
+    $('evoT').textContent='Faturamento por semana';
+    mk('cEvo',{type:'line',data:{labels:W.map(w=>dm(w.k)),datasets:[{label:'Faturamento',data:W.map(w=>w.t),borderColor:seq,backgroundColor:seq+'22',fill:true,tension:.25,borderWidth:2,pointRadius:5,pointHoverRadius:7,pointBackgroundColor:W.map(w=>w.part?css('--surface'):seq),pointBorderColor:seq,pointBorderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>'Semana de '+dbr(W[i[0].dataIndex].k),label:c=>' '+brl(c.parsed.y),afterLabel:c=>` ${num(W[c.dataIndex].n)} vendas${W[c.dataIndex].part?' · semana incompleta':''}`}}},scales:axes(false)}});
+    const F=W.filter(w=>!w.part).sort((a,b)=>b.t-a.t);
+    $('evoCall').innerHTML=F.length?`<span class="pill">Melhor semana: <b>${dm(F[0].k)}</b> ${brl(F[0].t)}</span><span class="pill">Pior semana: <b>${dm(F[F.length-1].k)}</b> ${brl(F[F.length-1].t)}</span>`:'';
+  }
+}
+
+/* ---------- rankings ---------- */
+function renderRank(){
+  const D=sel(),tot=agg(D).t,key=st.prod;
+  const P=gb(D,'p').sort((a,b)=>key==='x'?b.t-a.t:b.items-a.items).slice(0,10);
+  const seq=css('--seq');
+  mk('cProd',{type:'bar',data:{labels:P.map(x=>short(x.k,34)),datasets:[{data:P.map(x=>key==='x'?x.t:x.items),backgroundColor:seq,borderRadius:3,maxBarThickness:22}]},
+   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>P[i[0].dataIndex].k,label:c=>key==='x'?' '+brl(c.parsed.x):` ${num(c.parsed.x)} itens`,afterLabel:c=>` ${pct(P[c.dataIndex].t/tot)} do faturamento · ${brl(P[c.dataIndex].t)}`}}},
+   scales:key==='x'?axes(true):{x:{grid:{color:css('--grid')},border:{display:false}},y:{grid:{display:false}}}}});
+  const E=D.filter(r=>r.c!==ANON),anon=D.filter(r=>r.c===ANON);
+  const C=gb(E,'c').sort((a,b)=>b.t-a.t),top=C.slice(0,10),t5=C.slice(0,5).reduce((s,x)=>s+x.t,0),et=agg(E).t;
+  $('cliSub').innerHTML=C.length?`Top 5: <b>${pct(t5/tot)}</b> do faturamento`:'';
+  mk('cCli',{type:'bar',data:{labels:top.map(x=>short(x.k,30)),datasets:[{data:top.map(x=>x.t),backgroundColor:seq,borderRadius:3,maxBarThickness:22}]},
+   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>top[i[0].dataIndex].k,label:c=>' '+brl(c.parsed.x),afterLabel:c=>` ${pct(top[c.dataIndex].t/tot)} do total · ${top[c.dataIndex].n} vendas`}}},scales:axes(true)}});
+  const F=gb(D,'f').sort((a,b)=>b.t-a.t);
+  mk('cFam',{type:'bar',data:{labels:F.map(x=>x.k),datasets:[{data:F.map(x=>x.t),backgroundColor:seq,borderRadius:3,maxBarThickness:48}]},
+   options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.parsed.y),afterLabel:c=>` ${pct(F[c.dataIndex].t/tot)} do total · ${num(F[c.dataIndex].items)} itens`}}},scales:axes(false)}});
+}
+
+/* ---------- canais ---------- */
+function renderChannels(){
+  const Dq=sel({month:false,canal:false}),Dc=sel({canal:false}),tot=agg(Dc).t,cols=[css('--s1'),css('--s2'),css('--s3')],ms=PER.meses;
+  const m1=ms[0],mLast=ms[ms.length-1];
+  mk('cCan',{type:'bar',data:{labels:ms.map(m=>lblMs(m)),datasets:CH.map((c,i)=>({label:c,data:ms.map(m=>agg(Dq.filter(r=>r.ch===c&&r.d.slice(5,7)===m)).t),backgroundColor:cols[i],borderColor:css('--surface'),borderWidth:2,borderRadius:3}))},
+   options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,boxHeight:12}},tooltip:{...ttBRL,mode:'index'}},scales:{x:{...axes(false).x,stacked:true},y:{...axes(false).y,stacked:true}}}});
+  const row=(name,rows,rowsQ,col,cls)=>{const a=agg(rows),j=m1?agg(rowsQ.filter(r=>r.d.slice(5,7)===m1)).t:0,s=mLast?agg(rowsQ.filter(r=>r.d.slice(5,7)===mLast)).t:0;
+    return `<tr class="${cls||''}"><td>${col?`<span class="dot" style="background:${col}"></span>`:''}${name}</td><td class="num">${brl(a.t)}</td><td class="num">${tot?pct(a.t/tot):'—'}</td><td class="num">${num(a.n)}</td><td class="num">${brl(a.tk)}</td><td class="num">${m1&&mLast&&m1!==mLast?vrTxt(vr(s,j)):'—'}</td></tr>`};
+  const colVar=m1&&mLast&&m1!==mLast?`${lblMs(mLast)}/${lblMs(m1)}`:'Var.';
+  $('tCan').innerHTML=`<thead><tr><th>Canal</th><th class="num">Fatur.</th><th class="num">Part.</th><th class="num">Vendas</th><th class="num">Ticket</th><th class="num">${colVar}</th></tr></thead><tbody>`+
+    CH.map((c,i)=>row(c,Dc.filter(r=>r.ch===c),Dq.filter(r=>r.ch===c),cols[i])).join('')+
+    row('Consumidor final (PDV + pedidos)',Dc.filter(r=>r.ch!==CH[2]),Dq.filter(r=>r.ch!==CH[2]),null,'sub-row')+'</tbody>';
+  $('tCan').querySelectorAll('th').forEach(t=>t.style.cursor='default');
+  const pan=(title,ch,col)=>{const rows=Dc.filter(r=>r.ch===ch),a=agg(rows),q=Dq.filter(r=>r.ch===ch);
+    const P=gb(rows,'p').sort((x,y)=>y.t-x.t).slice(0,5),mx=P[0]?P[0].t:1;
+    return `<div class="card"><h3><span class="dot" style="background:${col}"></span>${title}</h3>
+     <div class="panel-k"><div><div class="lab">Faturamento</div><div class="v">${brl(a.t)}</div></div><div><div class="lab">Vendas</div><div class="v">${num(a.n)}</div></div><div><div class="lab">Ticket médio</div><div class="v">${brl(a.tk)}</div></div><div><div class="lab">Itens</div><div class="v">${num(a.items)}</div></div></div>
+     <div class="mini"><canvas id="m${ch.length}${ch[0]}"></canvas></div>
+     <div class="sub" style="margin-bottom:6px">Produtos mais vendidos</div>
+     ${P.length?P.map(x=>`<div class="hb"><span>${x.k}</span><span>${brl(x.t)}</span><div class="bar"><i style="width:${x.t/mx*100}%"></i></div></div>`).join(''):'<div class="empty">Sem vendas nos filtros.</div>'}</div>`};
+  $('panels').innerHTML=pan('PDV (varejo, sem identificação do cliente)',CH[0],cols[0])+pan('Consumidor final por pedido de venda (cliente nominal)',CH[1],cols[1]);
+  [[CH[0],cols[0]],[CH[1],cols[1]]].forEach(([ch,col])=>{
+    mk('m'+ch.length+ch[0],{type:'bar',data:{labels:ms.map(m=>lblMs(m)),datasets:[{data:ms.map(m=>agg(Dq.filter(r=>r.ch===ch&&r.d.slice(5,7)===m)).t),backgroundColor:col,borderRadius:3,maxBarThickness:60}]},
+     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.parsed.y)}}},scales:axes(false)}})});
+}
+
+/* ---------- tabelas ordenáveis ---------- */
+const tstate={};
+function table(id,cols,rows){
+  const s=tstate[id]||(tstate[id]={k:cols[0].k,dir:-1});
+  const sorted=[...rows].sort((a,b)=>{const x=a[s.k],y=b[s.k];return (typeof x==='number'?x-y:String(x).localeCompare(String(y),'pt-BR'))*s.dir});
+  const el=$(id);
+  el.innerHTML='<thead><tr>'+cols.map(c=>`<th class="${c.num?'num':''}" tabindex="0" data-k="${c.k}" ${s.k===c.k?`aria-sort="${s.dir>0?'ascending':'descending'}"`:''}>${c.l}</th>`).join('')+'</tr></thead><tbody>'+
+   (sorted.length?sorted.map(r=>'<tr>'+cols.map(c=>`<td class="${c.num?'num':''} ${c.wrap?'wrapc':''}">${c.f?c.f(r[c.k],r):r[c.k]}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${cols.length}" class="empty">Sem dados nos filtros.</td></tr>`)+'</tbody>';
+  const go=th=>{const k=th.dataset.k;if(s.k===k)s.dir*=-1;else{s.k=k;s.dir=cols.find(c=>c.k===k).num?-1:1}table(id,cols,rows)};
+  el.querySelectorAll('th').forEach(th=>{th.onclick=()=>go(th);th.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go(th)}}});
+}
+function renderTables(){
+  const D=sel(),tot=agg(D).t;
+  table('tProd',[{k:'k',l:'Produto',wrap:1},{k:'fam',l:'Família'},{k:'items',l:'Itens',num:1,f:num},{k:'t',l:'Faturamento',num:1,f:brl},{k:'sh',l:'% do total',num:1,f:v=>pct(v)}],
+    gb(D,'p').map(x=>({...x,fam:D.find(r=>r.p===x.k).f,sh:tot?x.t/tot:0})));
+  const mo=m=>x=>agg(D.filter(r=>r.c===x.k&&r.d.slice(5,7)===m)).t;
+  const colsCli=[{k:'k',l:'Cliente',wrap:1},{k:'n',l:'Vendas',num:1,f:num},{k:'t',l:'Faturamento',num:1,f:brl},{k:'sh',l:'% do total',num:1,f:v=>pct(v)}];
+  PER.meses.forEach(m=>colsCli.push({k:'m'+m,l:lblMs(m),num:1,f:brl}));
+  table('tCli',colsCli,gb(D,'c').map(x=>{const row={...x,sh:tot?x.t/tot:0};PER.meses.forEach(m=>{row['m'+m]=mo(m)(x)});return row}));
+  table('tRaw',[{k:'d',l:'Data',f:dbr},{k:'nf',l:'NF'},{k:'c',l:'Cliente',wrap:1},{k:'ch',l:'Canal'},{k:'p',l:'Produto',wrap:1},{k:'x',l:'Valor',num:1,f:brl}],D);
+}
+
+/* ---------- conteúdo fixo ---------- */
+const SUG=[];
+$('sug').innerHTML=SUG.map(s=>`<div class="card"><h3>${s.t}</h3><dl><div><dt>Dado</dt><dd>${s.d}</dd></div><div><dt>Ação recomendada</dt><dd>${s.a}</dd></div><div><dt>Impacto esperado</dt><dd>${s.i}</dd></div></dl></div>`).join('');
+$('exec').innerHTML='';
+$('notes').innerHTML='';
+
+/* ---------- oportunidades (trimestre anterior + estoque) ---------- */
+let RP=null,PREV=null,EST=null;
+const dias=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5)+1;
+const chaveP=r=>r.cod||r.p;
+let CUR=null;
+const hojeISO=()=>new Date().toISOString().slice(0,10);
+const inicioTrimestre=s=>`${s.slice(0,4)}-${String(3*Math.floor((+s.slice(5,7)-1)/3)+1).padStart(2,'0')}-01`;
+function renderOport(){
+  if(PER.fonte!=='omie'||!RP||!CUR)return;
+  const R=CUR.rows;
+  const dCur=dias(CUR.inicio,CUR.fim),dPrev=dias(PREV.inicio,PREV.fim);
+  tstate.tCliParou??={k:'t',dir:-1};tstate.tProdQueda??={k:'tp',dir:-1};tstate.tParado??={k:'custo',dir:-1};
+  $('opSub').textContent=`${dbr(CUR.inicio)} a ${dbr(CUR.fim)} × ${dbr(PREV.inicio)} a ${dbr(PREV.fim)}`;
+
+  const cliAtual=new Set(R.map(r=>r.c));
+  const ult=(rows,k,key)=>rows.filter(r=>key(r)===k).reduce((m,r)=>r.d>m?r.d:m,'');
+  const parou=gb(RP.filter(r=>r.c!==ANON&&!cliAtual.has(r.c)),'c').map(x=>({...x,ult:ult(RP,x.k,r=>r.c)}));
+  table('tCliParou',[{k:'k',l:'Cliente',wrap:1},{k:'t',l:'Comprou no tri anterior',num:1,f:brl},{k:'n',l:'Vendas',num:1,f:num},{k:'ult',l:'Última compra',f:dbr}],parou);
+
+  const nome=new Map();[...RP,...R].forEach(r=>{if(!nome.has(chaveP(r)))nome.set(chaveP(r),{p:r.p,f:r.f})});
+  const totCur=new Map();gb(R,chaveP).forEach(x=>totCur.set(x.k,x.t));
+  const queda=gb(RP,chaveP).map(x=>{const tc=totCur.get(x.k)||0;const ritmo=(tc/dCur)/(x.t/dPrev)-1;
+    return {k:nome.get(x.k).p,fam:nome.get(x.k).f,tp:x.t,tc,ritmo,ult:ult([...RP,...R],x.k,chaveP)}}).filter(x=>x.tc===0||x.ritmo<-.5);
+  table('tProdQueda',[{k:'k',l:'Produto',wrap:1},{k:'fam',l:'Família'},{k:'tp',l:'Tri anterior',num:1,f:brl},{k:'tc',l:'Período atual',num:1,f:brl},{k:'ritmo',l:'Ritmo diário',num:1,f:v=>vrTxt(v)},{k:'ult',l:'Última venda',f:dbr}],queda);
+
+  let parado=[];
+  if(EST){
+    const vendCod=new Set(R.map(r=>r.cod).filter(Boolean)),vendNome=new Set(R.map(r=>r.p));
+    parado=EST.filter(e=>!vendCod.has(e.cod)&&!vendNome.has(e.p)).map(e=>{
+      const u=ult(RP,e.cod,r=>r.cod)||ult(RP,e.p,r=>r.p);
+      return {k:e.p,fam:e.f,q:e.q,custo:e.custo,venda:e.q*e.preco,ult:u}});
+    table('tParado',[{k:'k',l:'Produto',wrap:1},{k:'fam',l:'Família'},{k:'q',l:'Saldo',num:1,f:num},{k:'custo',l:'Custo parado',num:1,f:brl},{k:'venda',l:'A preço de venda',num:1,f:brl},{k:'ult',l:'Última venda',f:v=>v?dbr(v):'sem venda no tri anterior'}],parado);
+  }else $('tParado').innerHTML='<tbody><tr><td class="empty">Estoque indisponível no momento.</td></tr></tbody>';
+
+  const k=(l,v,n)=>`<div class="card kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="note">${n}</div></div>`;
+  $('opKpis').innerHTML=
+    k('Clientes parados',num(parou.length),`${brl(parou.reduce((s,x)=>s+x.t,0))} comprados no tri anterior`)+
+    k('Produtos em queda',num(queda.length),`${num(queda.filter(x=>x.tc===0).length)} zeraram as vendas`)+
+    (EST?k('Estoque sem venda',brl(parado.reduce((s,x)=>s+x.custo,0)),`${num(parado.length)} produtos, a custo médio`):'');
+}
+async function loadOport(){
+  try{
+    const fimRef=PER.fim<hojeISO()?PER.fim:hojeISO(),iniQ=inicioTrimestre(fimRef);
+    PREV=await fetch('/api/periodo-anterior?inicio='+iniQ).then(r=>r.json());
+    const noIntervalo=(ini,fim)=>PER.inicio<=ini&&PER.fim>=fim;
+    const buscar=(ini,fim)=>noIntervalo(ini,fim)?Promise.resolve({rows:R.filter(r=>r.d>=ini&&r.d<=fim)}):
+      fetch(`/api/vendas?inicio=${ini}&fim=${fim}`).then(r=>r.ok?r.json():null);
+    const [jc,jp,je]=await Promise.all([buscar(iniQ,fimRef),buscar(PREV.inicio,PREV.fim),
+      fetch('/api/estoque').then(r=>r.ok?r.json():null)]);
+    CUR=jc?{inicio:iniQ,fim:fimRef,rows:jc.rows}:null;
+    if(jp)RP=jp.rows;
+    EST=je&&je.fonte==='omie'?je.itens:null;
+    renderOport();
+  }catch(e){$('opSub').textContent='Comparativo indisponível'}
+}
+
+function render(){base();renderKPIs();renderEvo();renderRank();renderChannels();renderTables();renderOport()}
+let refreshTimer=null;
+async function load(silent){
+  const q=new URLSearchParams(location.search);
+  try{
+    const cfg=await fetch('/api/config').then(r=>r.json());
+    PER.empresa=cfg.empresa||PER.empresa;
+    if(!q.has('inicio'))q.set('inicio',cfg.inicio_padrao);
+    if(!q.has('fim'))q.set('fim',cfg.fim_padrao);
+    const url='/api/vendas?'+q.toString();
+    const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
+    const j=await r.json();R=j.rows;
+    PER.inicio=j.inicio;PER.fim=j.fim;PER.fonte=j.fonte;PER.meses=mesesNoPeriodo(j.inicio,j.fim);
+    $('pIni').value=j.inicio;$('pFim').value=j.fim;
+    $('eyebrow').textContent='Faturamento · '+dbr(j.inicio)+' a '+dbr(j.fim)+(j.fonte==='omie'?' · Omie, atualizado em '+(j.atualizado_em||''):' · '+j.fonte);
+    $('titulo').textContent='Painel de Vendas · '+PER.empresa;
+    const live=j.fonte==='omie';
+    ['secSug','secExec','secNotes'].forEach(id=>{$(id).hidden=live});
+    $('secOport').hidden=!live;
+    if(live)loadOport();
+    if(!silent&&live)console.info('Dados Omie atualizados',new Date().toLocaleString('pt-BR'));
+    if(refreshTimer)clearInterval(refreshTimer);
+    const sec=+cfg.refresh_sec||0;
+    if(sec>0)refreshTimer=setInterval(()=>load(true),sec*1000);
+  }catch(e){
+    if(!silent)document.querySelector('main').insertAdjacentHTML('afterbegin','<div class="notes"><b>Não foi possível carregar os dados.</b> '+e.message+'</div>');
+  }
+  buildMonthFilters();buildFilters();if(window.Chart)render();
+}
+$('fPer').onsubmit=e=>{e.preventDefault();const a=$('pIni').value,b=$('pFim').value;if(!a||!b||a>b)return;
+  location.search='?inicio='+a+'&fim='+b};
+load();
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>window.Chart&&render())}catch(e){}
+new MutationObserver(()=>window.Chart&&render()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+</script>
