@@ -78,15 +78,32 @@ def periodo_anterior(inicio: str, fim: str) -> tuple[str, str]:
     return date(fim_p.year, 3 * ((fim_p.month - 1) // 3) + 1, 1).isoformat(), fim_p.isoformat()
 
 
+class ErroSnapshot(RuntimeError):
+    pass
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def snapshot() -> dict:
     import httpx
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet, InvalidToken
 
-    r = httpx.get(os.environ["PAINEL_DATA_URL"], params={"t": int(time.time() // 300)}, timeout=60,
-                  follow_redirects=True)
-    r.raise_for_status()
-    return json.loads(gzip.decompress(Fernet(os.environ["PAINEL_DATA_KEY"].encode()).decrypt(r.content)))
+    url = os.environ["PAINEL_DATA_URL"].strip().strip('"')
+    chave = os.environ["PAINEL_DATA_KEY"].strip().strip('"').replace(" ", "")
+    try:
+        r = httpx.get(url, params={"t": int(time.time() // 300)}, timeout=60, follow_redirects=True)
+    except httpx.HTTPError:
+        raise ErroSnapshot("Não foi possível baixar os dados (falha de rede). Tente de novo em instantes.")
+    if r.status_code != 200:
+        raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira PAINEL_DATA_URL.")
+    try:
+        f = Fernet(chave.encode())
+    except ValueError:
+        raise ErroSnapshot(f"PAINEL_DATA_KEY em formato inválido ({len(chave)} caracteres; o correto são 44, "
+                           "terminando com '='). Copie de novo do .env.")
+    try:
+        return json.loads(gzip.decompress(f.decrypt(r.content)))
+    except InvalidToken:
+        raise ErroSnapshot("PAINEL_DATA_KEY não corresponde à chave usada pelo PC. Copie de novo do .env.")
 
 
 def _buscar(inicio: str, fim: str):
@@ -122,8 +139,11 @@ if FONTE == "snapshot":
     try:
         with st.spinner("Carregando dados…"):
             snap = snapshot()
-    except Exception:
-        st.error("Não foi possível carregar os dados publicados. Verifique PAINEL_DATA_URL e PAINEL_DATA_KEY.")
+    except ErroSnapshot as e:
+        st.error(str(e))
+        st.stop()
+    except Exception as e:
+        st.error(f"Não foi possível carregar os dados publicados ({type(e).__name__}).")
         st.stop()
     lim_ini, lim_fim = date.fromisoformat(snap["inicio"]), date.fromisoformat(snap["fim"])
     padrao = (max(date.fromisoformat(snap.get("inicio_padrao", snap["inicio"])), lim_ini), lim_fim)
