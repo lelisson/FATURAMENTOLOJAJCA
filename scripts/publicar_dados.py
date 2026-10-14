@@ -11,7 +11,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,12 +50,6 @@ def inicio_padrao(hoje: date) -> date:
     return date.fromisoformat(v)
 
 
-def trimestre_anterior(d: date) -> date:
-    ini_q = date(d.year, 3 * ((d.month - 1) // 3) + 1, 1)
-    fim_p = ini_q - timedelta(days=1)
-    return date(fim_p.year, 3 * ((fim_p.month - 1) // 3) + 1, 1)
-
-
 def git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=PASTA, capture_output=True, text=True, creationflags=SEM_JANELA)
 
@@ -82,8 +76,7 @@ def main() -> int:
         log("PAINEL_DATA_KEY ausente no .env")
         return 1
     hoje = date.today()
-    ini_padrao = inicio_padrao(hoje)
-    ini = trimestre_anterior(ini_padrao)
+    ini_padrao = ini = inicio_padrao(hoje)
     t0 = time.time()
     try:
         rows = omie.vendas(ini.isoformat(), hoje.isoformat())
