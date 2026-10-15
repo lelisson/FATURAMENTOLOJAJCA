@@ -30,13 +30,13 @@ Abra http://localhost:8000
 ## 2. Conectar vendas reais da JCA Filial (Omie)
 
 1. No Omie da filial: crie/obtenha **App Key** e **App Secret** (somente leitura basta para consultas).
-2. Edite o `.env`:
-   - `OMIE_APP_KEY` e `OMIE_APP_SECRET`
+2. Crie as variáveis de ambiente **do usuário** do Windows (não no `.env`): `OMIE_FILIAL_APP_KEY` e `OMIE_FILIAL_APP_SECRET` (filial), `OMIE_APP_KEY` e `OMIE_APP_SECRET` (matriz, as mesmas dos scripts de estoque) e `PAINEL_DATA_KEY`.
+3. Edite o `.env`:
    - `DATA_SOURCE=omie`
    - Ajuste `DEFAULT_INICIO` / `DEFAULT_FIM` se quiser outro período.
-3. Teste: `python scripts/test_conexao.py`
-4. (Opcional) Ver JSON bruto de NF: `python scripts/inspect_omie.py 2026-10-01 2026-10-07`
-5. Inicie: duplo clique em **Iniciar Painel.bat** ou o comando uvicorn acima.
+4. Teste: `python scripts/test_conexao.py`
+5. (Opcional) Ver JSON bruto de NF: `python scripts/inspect_omie.py 2026-10-01 2026-10-07`
+6. Inicie: duplo clique em **Iniciar Painel.bat** ou o comando uvicorn acima.
 
 O navegador **atualiza sozinho** a cada `PANEL_REFRESH_SEC` segundos (padrão 300). O servidor também cacheia a API por `CACHE_TTL` segundos.
 
@@ -70,7 +70,7 @@ Também por URL: `http://localhost:8000/api/relatorio?inicio=2026-09-01&fim=2026
 - Local: `streamlit run streamlit_app.py` (usa o `.env`).
 - Streamlit Community Cloud: arquivo principal `streamlit_app.py`; configuração em **Settings > Secrets** no formato de `.streamlit/secrets.toml.example`. `APP_PASSWORD_HASH` (opcional) pede senha para abrir; só o hash PBKDF2 fica guardado. `python scripts/gerar_secrets.py --nova-senha` gera senha nova (em `~/.painel-omie/senha-streamlit.txt`) e o `secrets.toml` com o hash. Após 5 erros a sessão fica bloqueada por 5 min.
 - **Modo recomendado (só visualização):** o GitHub Actions (`.github/workflows/publicar.yml`) roda `scripts/publicar_dados.py` a cada 30 min, mesmo com o PC desligado. As chaves ficam em **Settings > Secrets and variables > Actions** (`OMIE_APP_KEY`, `OMIE_APP_SECRET`, `PAINEL_DATA_KEY`), nunca no código. O script consulta a Omie (somente leitura), criptografa os dados (Fernet, `PAINEL_DATA_KEY`) e sobrescreve `painel.enc` no branch `dados`. O Streamlit recebe só `PAINEL_DATA_URL` e `PAINEL_DATA_KEY`. Para publicar na hora: aba **Actions > Publicar dados do painel > Run workflow**.
-- **Filial e Matriz:** o mesmo script publica `painel.enc` (filial, `OMIE_APP_KEY`) e `painel_matriz.enc` (matriz, `OMIE_MATRIZ_APP_KEY`); o Streamlit tem o seletor **Empresa**. No PC, as chaves da matriz são lidas do `.env` do projeto de estoque (pasta acima), sem cópia. `PEDIDOS_MAX_SEG` limita o tempo de ConsultarPedido por execução. O script também roda num PC com `.env` (log em `%USERPROFILE%\.painel-omie\publicar.log`).
+- **Filial e Matriz:** o mesmo script publica `painel.enc` (filial, `OMIE_FILIAL_APP_KEY`) e `painel_matriz.enc` (matriz, `OMIE_MATRIZ_APP_KEY`); o Streamlit tem o seletor **Empresa**. No GitHub os secrets da filial se chamam `OMIE_APP_KEY`/`OMIE_APP_SECRET`; no PC, a matriz usa as variáveis de usuário `OMIE_APP_KEY`/`OMIE_APP_SECRET` (as mesmas dos scripts de estoque). `PEDIDOS_MAX_SEG` limita o tempo de ConsultarPedido por execução. O script também roda num PC com `.env` (log em `%USERPROFILE%\.painel-omie\publicar.log`).
 - Sem credenciais, o app abre com `backend/data/vendas_demo.json` (dados fictícios, gerados por `scripts/gerar_demo.py`).
 - Teste rápido: `python scripts/testar_streamlit.py`.
 

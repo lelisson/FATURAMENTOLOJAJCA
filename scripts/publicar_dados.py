@@ -24,7 +24,7 @@ load_dotenv(ROOT / ".env")
 
 from cryptography.fernet import Fernet  # noqa: E402
 
-from backend.app import omie  # noqa: E402
+from backend.app import ambiente, omie  # noqa: E402
 
 NO_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 if NO_ACTIONS:
@@ -129,7 +129,7 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
 
 
 def main() -> int:
-    chave = os.getenv("PAINEL_DATA_KEY")
+    chave = ambiente.ler("PAINEL_DATA_KEY")
     if not chave:
         log("PAINEL_DATA_KEY ausente")
         return 1

@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
-os.environ["OMIE_APP_KEY"] = ""
-os.environ["OMIE_APP_SECRET"] = ""
+os.environ["OMIE_FILIAL_APP_KEY"] = ""
+os.environ["OMIE_FILIAL_APP_SECRET"] = ""
 if "snapshot" not in sys.argv:
     os.environ["PAINEL_DATA_URL"] = ""
 

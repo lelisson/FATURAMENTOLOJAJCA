@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from . import ambiente
 from . import transform as T
 
 READ_ONLY_CALLS = frozenset(
@@ -48,35 +49,32 @@ POR_PAGINA_NF = 50
 POR_PAGINA_CUPOM = 100
 
 
-# Empresa ativa: "" = filial (OMIE_APP_KEY), "matriz" = OMIE_MATRIZ_APP_KEY. As chamadas de uma
-# empresa rodam em sequência (publicar_dados.py), então um global basta, inclusive nas threads de _paginar.
-EMPRESAS = {"filial": "", "matriz": "matriz"}
-_empresa = ""
+# Empresa ativa → chaves OMIE_FILIAL_APP_KEY / OMIE_MATRIZ_APP_KEY. As chamadas de uma empresa rodam
+# em sequência (publicar_dados.py), então um global basta, inclusive nas threads de _paginar.
+EMPRESAS = ("filial", "matriz")
+_empresa = "filial"
 
 
 def usar_empresa(empresa: str) -> None:
     global _empresa
-    _empresa = EMPRESAS[empresa]
+    if empresa not in EMPRESAS:
+        raise ValueError(empresa)
+    _empresa = empresa
 
 
 def carregar_chaves_matriz_local() -> None:
-    """No PC, as chaves da matriz ficam no .env do projeto de estoque (pasta acima); só são lidas, nunca copiadas."""
-    if os.getenv("OMIE_MATRIZ_APP_KEY"):
+    """No PC, as chaves da matriz são OMIE_APP_KEY/OMIE_APP_SECRET do usuário do Windows (as mesmas dos
+    scripts de estoque); no GitHub Actions já vêm como OMIE_MATRIZ_*."""
+    if ambiente.ler("OMIE_MATRIZ_APP_KEY"):
         return
-    from dotenv import dotenv_values
-
-    env = Path(os.getenv("OMIE_MATRIZ_ENV") or Path(__file__).resolve().parents[4] / ".env")
-    if env.exists():
-        v = dotenv_values(env)
-        if v.get("OMIE_APP_KEY") and v.get("OMIE_APP_SECRET"):
-            os.environ["OMIE_MATRIZ_APP_KEY"] = v["OMIE_APP_KEY"].strip()
-            os.environ["OMIE_MATRIZ_APP_SECRET"] = v["OMIE_APP_SECRET"].strip()
+    k, s = ambiente.ler("OMIE_APP_KEY"), ambiente.ler("OMIE_APP_SECRET")
+    if k and s:
+        os.environ["OMIE_MATRIZ_APP_KEY"], os.environ["OMIE_MATRIZ_APP_SECRET"] = k, s
 
 
 def _credenciais() -> tuple[str, str]:
-    pre = f"OMIE_{_empresa.upper()}_" if _empresa else "OMIE_"
-    k = (os.getenv(pre + "APP_KEY") or "").strip()
-    s = (os.getenv(pre + "APP_SECRET") or "").strip()
+    pre = f"OMIE_{_empresa.upper()}_"
+    k, s = ambiente.ler(pre + "APP_KEY"), ambiente.ler(pre + "APP_SECRET")
     if not k or not s:
         raise RuntimeError(f"{pre}APP_KEY e {pre}APP_SECRET não configurados")
     return k, s
@@ -176,7 +174,7 @@ PASTA_DADOS = Path(__file__).resolve().parents[1] / "data"
 
 
 def _arquivo_cache_pedidos() -> Path:
-    return PASTA_DADOS / (f"cache_pedidos_{_empresa}.json" if _empresa else "cache_pedidos.json")
+    return PASTA_DADOS / ("cache_pedidos.json" if _empresa == "filial" else f"cache_pedidos_{_empresa}.json")
 
 
 def _consultar_consumidor(id_pedido: int) -> bool:

@@ -12,6 +12,9 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from backend.app import ambiente  # noqa: E402
+
 env = dotenv_values(ROOT / ".env")
 destino = ROOT / ".streamlit" / "secrets.toml"
 arquivo_senha = Path.home() / ".painel-omie" / "senha-streamlit.txt"
@@ -43,7 +46,7 @@ if "--nova-senha" in sys.argv or not hash_atual:
 
 linhas = [
     f'PAINEL_DATA_URL = "{env["PAINEL_DATA_URL"].strip()}"',
-    f'PAINEL_DATA_KEY = "{env["PAINEL_DATA_KEY"].strip()}"',
+    f'PAINEL_DATA_KEY = "{ambiente.ler("PAINEL_DATA_KEY")}"',
     f'APP_PASSWORD_HASH = "{hash_atual}"',
     f'OMIE_EMPRESA = "{(env.get("OMIE_EMPRESA") or "JCA Filial").strip()}"',
 ]

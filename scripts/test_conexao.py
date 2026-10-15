@@ -1,4 +1,4 @@
-"""Valida OMIE_APP_KEY / OMIE_APP_SECRET no .env (não imprime as chaves).
+"""Valida OMIE_FILIAL_APP_KEY / OMIE_FILIAL_APP_SECRET das variáveis de ambiente (não imprime as chaves).
 
 Uso (na raiz painel-omie/painel-omie):  python scripts/test_conexao.py
 """

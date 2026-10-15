@@ -3,7 +3,7 @@
 Fontes de dados, nesta ordem:
 - snapshot: PAINEL_DATA_URL + PAINEL_DATA_KEY → arquivo criptografado publicado pelo GitHub Actions
   (scripts/publicar_dados.py). As chaves da Omie não ficam no Streamlit.
-- omie: OMIE_APP_KEY + OMIE_APP_SECRET → consulta direta (somente leitura).
+- omie: OMIE_FILIAL_APP_KEY + OMIE_FILIAL_APP_SECRET → consulta direta da filial (somente leitura).
 - sample: dados fictícios (backend/data/vendas_demo.json).
 
 Senha: APP_PASSWORD_HASH (gerado por scripts/gerar_secrets.py); a senha em si não fica guardada.
@@ -37,7 +37,7 @@ EMPRESA = os.getenv("OMIE_EMPRESA", "JCA Filial")
 ARQUIVOS = {"Filial": "painel.enc", "Matriz": "painel_matriz.enc"}
 if os.getenv("PAINEL_DATA_URL") and os.getenv("PAINEL_DATA_KEY"):
     FONTE = "snapshot"
-elif os.getenv("OMIE_APP_KEY") and os.getenv("OMIE_APP_SECRET"):
+elif os.getenv("OMIE_FILIAL_APP_KEY") and os.getenv("OMIE_FILIAL_APP_SECRET"):
     FONTE = "omie"
 else:
     FONTE = "sample"

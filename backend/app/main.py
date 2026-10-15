@@ -154,8 +154,8 @@ def vendas(inicio: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
         raise HTTPException(503, "A Omie bloqueou temporariamente as consultas. O painel tenta de novo sozinho.")
     except RuntimeError as e:
         msg = str(e)
-        if "OMIE_APP_KEY" in msg or "Credenciais" in msg:
-            raise HTTPException(503, "Credenciais Omie não configuradas no .env deste servidor.")
+        if "APP_KEY" in msg or "Credenciais" in msg:
+            raise HTTPException(503, "Credenciais Omie não configuradas nas variáveis de ambiente deste PC.")
         raise HTTPException(502, "Falha ao consultar o Omie.")
     except Exception:  # nunca devolva app_key/app_secret em mensagens de erro
         raise HTTPException(502, "Falha ao consultar a fonte de dados.")
