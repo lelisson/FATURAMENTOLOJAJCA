@@ -95,9 +95,11 @@ def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
 
 
 # Meses fechados não são consultados de novo. Mude VERSAO_CONGELADO quando a regra de faturamento mudar.
-VERSAO_CONGELADO = 1
+VERSAO_CONGELADO = 2  # 2 = matriz sem PDV
 # Mês anterior fecha no dia 1 às 23:59 (NF-e pode ser cancelada em até 24 h da autorização).
 DIA_FECHAMENTO = int(os.getenv("DIA_FECHAMENTO", "2"))
+# Domingo (0=segunda … 6=domingo): reconsulta meses fechados e atualiza o cache.
+DIA_REVALIDACAO = int(os.getenv("DIA_REVALIDACAO", "6"))
 
 
 def mes_fechado_ate(hoje: date) -> str:
@@ -107,13 +109,20 @@ def mes_fechado_ate(hoje: date) -> str:
     return f"{hoje.year - (hoje.month == 1)}-{(hoje.month - 2) % 12 + 1:02d}"
 
 
+def deve_reprocessar(hoje: date) -> bool:
+    """Manual (REPROCESSAR=true) ou semanal no DIA_REVALIDACAO (domingo, horário de São Paulo no Actions)."""
+    if (os.getenv("REPROCESSAR") or "").strip().lower() in ("true", "1", "yes"):
+        return True
+    return hoje.weekday() == DIA_REVALIDACAO
+
+
 def arquivo_congelado(empresa: str) -> Path:
     return omie.PASTA_DADOS / f"cache_congelado_{empresa}.enc"
 
 
-def ler_congelado(empresa: str, fernet: Fernet) -> dict[str, list[dict]]:
+def ler_congelado(empresa: str, fernet: Fernet, hoje: date) -> dict[str, list[dict]]:
     arq = arquivo_congelado(empresa)
-    if os.getenv("REPROCESSAR") == "true" or not arq.exists():
+    if deve_reprocessar(hoje) or not arq.exists():
         return {}
     try:
         dados = json.loads(gzip.decompress(fernet.decrypt(arq.read_bytes())))
@@ -140,7 +149,10 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
         return None
     ini_padrao = ini = inicio_padrao(hoje)
     t0 = time.time()
-    congelado = ler_congelado(empresa, fernet)
+    if deve_reprocessar(hoje):
+        log(f"{empresa}: revalidação dos meses fechados "
+            f"({'manual' if (os.getenv('REPROCESSAR') or '').strip().lower() in ('true', '1', 'yes') else 'semanal'})")
+    congelado = ler_congelado(empresa, fernet, hoje)
     try:
         rows, congelado_novo = omie.vendas_congelando(ini.isoformat(), hoje.isoformat(), congelado,
                                                       mes_fechado_ate(hoje))

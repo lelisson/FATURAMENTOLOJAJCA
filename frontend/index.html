@@ -329,6 +329,9 @@ const CH=['PDV','Pedido – consumo final','Pedido – empresas'];
 const CHN={'PDV':'PDV','Pedido – consumo final':'Consumidor final','Pedido – empresas':'Empresas'};
 const ANON='Cliente Consumidor / Sem Tomador';
 const st={m:'all',ch:'all',fam:'all',cli:'all',evo:'m',prod:'x',q:''};
+const temPdv=()=>!/matriz/i.test(PER.empresa||'');
+const canais=()=>temPdv()?CH:CH.filter(c=>c!=='PDV');
+const corCanal=c=>cols()[CH.indexOf(c)];
 
 const $=id=>document.getElementById(id);
 const lblM=m=>NOMES_MES[+m]||m, lblMs=m=>NOMES_CURTOS[+m]||m;
@@ -385,7 +388,8 @@ function buildMonthFilters(){
     PER.meses.map(m=>`<button type="button" data-m="${m}" aria-pressed="${st.m===m}">${lblMs(m)}</button>`).join('');
 }
 function buildFilters(){
-  $('fc').innerHTML='<option value="all">Todos os canais</option>'+CH.map(c=>`<option value="${c}">${CHN[c]}</option>`).join('');
+  if(st.ch==='PDV'&&!temPdv())st.ch='all';
+  $('fc').innerHTML='<option value="all">Todos os canais</option>'+canais().map(c=>`<option value="${c}">${CHN[c]}</option>`).join('');
   $('ff').innerHTML='<option value="all">Todas as famílias</option>'+[...new Set(R.map(r=>r.f))].sort().map(c=>`<option>${esc(c)}</option>`).join('');
   $('fcl').innerHTML='<option value="all">Todos os clientes</option>'+[...new Set(R.map(r=>r.c))].sort().map(c=>`<option value="${esc(c)}">${esc(short(c,34))}</option>`).join('');
   $('fc').value=st.ch;$('ff').value=st.fam;$('fcl').value=st.cli;
@@ -495,9 +499,9 @@ function renderRank(){
 
 /* ---------- canais ---------- */
 function renderChannels(){
-  const Dq=sel({month:false,canal:false}),Dc=sel({canal:false}),tot=agg(Dc).t,cc=cols(),ms=PER.meses;
+  const Dq=sel({month:false,canal:false}),Dc=sel({canal:false}),tot=agg(Dc).t,chs=canais(),ms=PER.meses;
   const m1=ms[0],mL=ms[ms.length-1];
-  mk('cCan',{type:'bar',data:{labels:serieMeses(Dq,()=>true).labels,datasets:CH.map((c,i)=>({label:CHN[c],data:serieMeses(Dq,r=>r.ch===c).data,backgroundColor:cc[i],borderRadius:4,borderSkipped:false,maxBarThickness:56}))},
+  mk('cCan',{type:'bar',data:{labels:serieMeses(Dq,()=>true).labels,datasets:chs.map(c=>({label:CHN[c],data:serieMeses(Dq,r=>r.ch===c).data,backgroundColor:corCanal(c),borderRadius:4,borderSkipped:false,maxBarThickness:56}))},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'rectRounded',boxWidth:10,padding:16}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${brl(c.parsed.y)}`}}},
       scales:{x:{...axes(false).x,stacked:true},y:{...axes(false).y,stacked:true}}}});
   const vsPrev=temPrev()&&m1===mL,Pq=vsPrev?prevSel(false):[];
@@ -505,16 +509,17 @@ function renderChannels(){
     const v=vsPrev?vrTxt(vr(a.t,agg(Pq.filter(f)).t)):m1!==mL?vrTxt(vr(s,j)):'—';
     return `<tr class="${cls||''}"><td>${col?`<span class="sw" style="background:${col}"></span>`:''}${name}</td><td class="num">${brl(a.t)}</td><td class="num">${tot?pct(a.t/tot):'—'}</td><td class="num">${num(a.n)}</td><td class="num">${brl(a.tk)}</td><td class="num">${v}</td></tr>`};
   $('tCan').innerHTML=`<thead><tr><th>Canal</th><th class="num">Faturamento</th><th class="num">Part.</th><th class="num">Vendas</th><th class="num">Ticket</th><th class="num">${vsPrev?'vs '+S.prev_label:m1!==mL?lblMs(mL)+'/'+lblMs(m1):'Var.'}</th></tr></thead><tbody>`+
-    CH.map((c,i)=>row(CHN[c],r=>r.ch===c,cc[i])).join('')+
-    row('Consumidor final (PDV + pedidos)',r=>r.ch!==CH[2],null,'sub-row')+'</tbody>';
+    chs.map(c=>row(CHN[c],r=>r.ch===c,corCanal(c))).join('')+
+    row(temPdv()?'Consumidor final (PDV + pedidos)':'Consumidor final (pedidos)',r=>r.ch!==CH[2],null,'sub-row')+'</tbody>';
   $('tCan').querySelectorAll('th').forEach(t=>t.style.cursor='default');
-  const pan=(title,ch,col,id)=>{const rows=Dc.filter(r=>r.ch===ch),a=agg(rows),P=gb(rows,'p').sort((x,y)=>y.t-x.t).slice(0,5);
+  const pan=(title,ch,col,id)=>{const rows=Dc.filter(r=>r.ch===ch),a=agg(rows);
     return `<div class="card"><div class="ch"><h3><span class="sw" style="background:${col}"></span>${title}</h3></div>
       <div class="panel-k"><div><div class="lab">Faturamento</div><div class="v">${brk(a.t)}</div></div><div><div class="lab">Vendas</div><div class="v">${num(a.n)}</div></div><div><div class="lab">Ticket</div><div class="v">${brl(a.tk)}</div></div><div><div class="lab">Itens</div><div class="v">${num(a.items)}</div></div></div>
       <div class="mini"><canvas id="${id}"></canvas></div><div class="bl" id="${id}bl"></div></div>`};
-  $('panels').innerHTML=pan('PDV',CH[0],cc[0],'mPdv')+pan('Consumidor final (pedido)',CH[1],cc[1],'mCf');
-  [[CH[0],cc[0],'mPdv'],[CH[1],cc[1],'mCf']].forEach(([ch,col,id])=>{
-    const sm=serieMeses(Dq,r=>r.ch===ch);
+  const cards=temPdv()?[['PDV',CH[0],'mPdv'],['Consumidor final (pedido)',CH[1],'mCf']]:[['Consumidor final (pedido)',CH[1],'mCf']];
+  $('panels').innerHTML=cards.map(([title,ch,id])=>pan(title,ch,corCanal(ch),id)).join('');
+  cards.forEach(([,ch,id])=>{
+    const sm=serieMeses(Dq,r=>r.ch===ch),col=corCanal(ch);
     mk(id,{type:'bar',data:{labels:sm.labels,datasets:[{data:sm.data,backgroundColor:col,borderRadius:6,borderSkipped:false,maxBarThickness:44}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+brl(c.parsed.y)}}},scales:axes(false)}});
     barList(id+'bl',gb(Dc.filter(r=>r.ch===ch),'p').sort((x,y)=>y.t-x.t).slice(0,5).map(x=>({k:x.k,v:x.t})),brk,null,['Produtos mais vendidos','']);

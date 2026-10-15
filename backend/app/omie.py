@@ -354,7 +354,9 @@ def mapear_devolucao(nf: dict, canal_cliente: dict[str, tuple[bool, bool]]) -> l
         return []
     nf_num = ide.get("nNF") or "0"
     cliente = _cliente_nf(nf)
-    is_pdv, consumo = canal_cliente.get(cliente or T.ANON, (not cliente, False))
+    # Matriz não tem PDV: sem canal conhecido, assume pedido (não balcão).
+    padrao_pdv = _empresa == "filial" and not cliente
+    is_pdv, consumo = canal_cliente.get(cliente or T.ANON, (padrao_pdv, False))
 
     linhas: list[dict] = []
     for det in nf.get("det") or []:
@@ -407,8 +409,10 @@ def _coletar(inicio: str, fim: str, anteriores: list[dict] = ()) -> tuple[list[d
 
     with ThreadPoolExecutor(max_workers=2) as ex:
         f_nf = ex.submit(_nfs)
-        f_cup = ex.submit(listar_cupons_bruto, inicio, fim)
-        (nfs, entradas), cupons = f_nf.result(), f_cup.result()
+        # Matriz não tem PDV / CuponsFiscais.
+        f_cup = ex.submit(listar_cupons_bruto, inicio, fim) if _empresa == "filial" else None
+        (nfs, entradas) = f_nf.result()
+        cupons = f_cup.result() if f_cup else []
 
     def _id_ped(nf: dict) -> int:
         return int((nf.get("compl") or {}).get("nIdPedido") or 0)
@@ -505,9 +509,11 @@ def testar_conexao() -> str:
             "tpNF": "1",
         },
     )
-    _post(
-        "CuponsFiscais",
-        EP_CUPOM,
-        {"nPagina": 1, "nRegPorPagina": 1, "dDtEmissaoDe": _br(hoje), "dDtEmissaoAte": _br(hoje)},
-    )
-    return "Conexão Omie OK (NF-e + NFC-e PDV, somente leitura)."
+    if _empresa == "filial":
+        _post(
+            "CuponsFiscais",
+            EP_CUPOM,
+            {"nPagina": 1, "nRegPorPagina": 1, "dDtEmissaoDe": _br(hoje), "dDtEmissaoAte": _br(hoje)},
+        )
+        return "Conexão Omie OK (NF-e + NFC-e PDV, somente leitura)."
+    return "Conexão Omie OK (NF-e, somente leitura)."

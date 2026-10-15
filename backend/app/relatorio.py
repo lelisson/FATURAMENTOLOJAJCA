@@ -249,6 +249,7 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
 
     pdv_t = can.get("PDV", {}).get("t", 0)
     anon_t = sum(r["x"] for r in rows if r["c"] == ANON)
+    tem_pdv = "matriz" not in empresa.lower()
 
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -342,7 +343,7 @@ footer{{border-top:1px solid #e5e7ef;padding:14px 40px;color:#94a3b8;font-size:1
 
   <section class="blk"><h2>Top 10 clientes <small>5 maiores = {pct(top5 / A["t"]) if A["t"] else "—"} do faturamento</small></h2>
     <table><thead><tr><th></th><th>Cliente</th><th class="n">Vendas</th><th class="n">Faturamento</th><th class="n">Part.</th><th class="n">Var.</th></tr></thead><tbody>{cli_linhas}</tbody></table>
-    <div class="note">Vendas sem cliente identificado (consumidor no balcão): {brl(anon_t)} ({pct(anon_t / A["t"]) if A["t"] else "—"}). PDV total: {brl(pdv_t)}.</div>
+    <div class="note">Vendas sem cliente identificado: {brl(anon_t)} ({pct(anon_t / A["t"]) if A["t"] else "—"}).{f' PDV total: {brl(pdv_t)}.' if tem_pdv else ''}</div>
   </section>
 
   {f'''<section class="blk"><h2>Clientes sem recompra <small>compraram em {escape(titulo_prev.lower() if titulo_prev[0].isalpha() else titulo_prev)} e não em {escape(titulo.lower() if titulo[0].isalpha() else titulo)}</small></h2>
@@ -350,7 +351,7 @@ footer{{border-top:1px solid #e5e7ef;padding:14px 40px;color:#94a3b8;font-size:1
     {f'<div class="note">Mostrando 12 de {num(len(perdidos))} clientes.</div>' if len(perdidos) > 12 else ''}
   </section>''' if perdidos else ''}
 </div>
-<footer><span>{escape(empresa)} · Fonte: ERP Omie (NF-e e NFC-e, líquidas de cancelamentos e devoluções)</span><span>Dados de {escape(atualizado_em)}</span></footer>
+<footer><span>{escape(empresa)} · Fonte: ERP Omie ({'NF-e e NFC-e' if tem_pdv else 'NF-e'}, líquidas de cancelamentos e devoluções)</span><span>Dados de {escape(atualizado_em)}</span></footer>
 </article>
 </body>
 </html>"""
