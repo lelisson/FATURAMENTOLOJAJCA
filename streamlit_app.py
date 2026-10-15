@@ -33,6 +33,8 @@ except Exception:  # sem secrets.toml (execução local)
 from backend.app import omie, painel, relatorio  # noqa: E402  (depois de carregar as credenciais)
 
 EMPRESA = os.getenv("OMIE_EMPRESA", "JCA Filial")
+# empresa → arquivo publicado por scripts/publicar_dados.py no mesmo branch de PAINEL_DATA_URL
+ARQUIVOS = {"Filial": "painel.enc", "Matriz": "painel_matriz.enc"}
 if os.getenv("PAINEL_DATA_URL") and os.getenv("PAINEL_DATA_KEY"):
     FONTE = "snapshot"
 elif os.getenv("OMIE_APP_KEY") and os.getenv("OMIE_APP_SECRET"):
@@ -40,7 +42,7 @@ elif os.getenv("OMIE_APP_KEY") and os.getenv("OMIE_APP_SECRET"):
 else:
     FONTE = "sample"
 
-st.set_page_config(page_title=f"Vendas · {EMPRESA}", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Vendas · JCA", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""<style>
 header[data-testid="stHeader"]{display:none}
 .block-container{padding:.6rem 1rem 0;max-width:100%}
@@ -68,7 +70,7 @@ def exigir_senha() -> None:
     if not (os.getenv("APP_PASSWORD_HASH") or os.getenv("APP_PASSWORD")) or st.session_state.get("ok"):
         return
     with st.form("login"):
-        st.subheader(f"Painel de vendas · {EMPRESA}")
+        st.subheader("Painel de vendas · JCA")
         tentativa = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             restante = st.session_state.get("bloqueio", 0) - time.time()
@@ -110,16 +112,19 @@ class ErroSnapshot(RuntimeError):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def snapshot() -> dict:
+def snapshot(empresa: str = "Filial") -> dict:
     import httpx
     from cryptography.fernet import Fernet, InvalidToken
 
     url = os.environ["PAINEL_DATA_URL"].strip().strip('"')
+    url = url.rsplit("/", 1)[0] + "/" + ARQUIVOS[empresa]
     chave = os.environ["PAINEL_DATA_KEY"].strip().strip('"').replace(" ", "")
     try:
         r = httpx.get(url, params={"t": int(time.time() // 300)}, timeout=60, follow_redirects=True)
     except httpx.HTTPError:
         raise ErroSnapshot("Não foi possível baixar os dados (falha de rede). Tente de novo em instantes.")
+    if r.status_code == 404 and empresa != "Filial":
+        raise ErroSnapshot(f"Os dados da {empresa} ainda não foram publicados. Tente de novo em alguns minutos.")
     if r.status_code != 200:
         raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira PAINEL_DATA_URL.")
     try:
@@ -130,7 +135,7 @@ def snapshot() -> dict:
     try:
         return json.loads(gzip.decompress(f.decrypt(r.content)))
     except InvalidToken:
-        raise ErroSnapshot("PAINEL_DATA_KEY não corresponde à chave usada pelo PC. Copie de novo do .env.")
+        raise ErroSnapshot("PAINEL_DATA_KEY não corresponde à chave usada na publicação. Copie de novo do .env.")
 
 
 def _buscar(inicio: str, fim: str):
@@ -161,11 +166,17 @@ if FONTE == "sample":
                "PAINEL_DATA_KEY em Settings > Secrets do app.")
 
 hoje = date.today()
+c0, c1, c2, c3, c4 = st.columns([1.6, 3, 1.2, 1.6, 3.4])
+empresa = "Filial"
+if FONTE == "snapshot":
+    with c0:
+        empresa = st.segmented_control("Empresa", list(ARQUIVOS), default="Filial", key="empresa") or "Filial"
 snap = None
 if FONTE == "snapshot":
     try:
         with st.spinner("Carregando dados…"):
-            snap = snapshot()
+            snap = snapshot(empresa)
+            EMPRESA = snap.get("empresa") or f"JCA {empresa}"
     except ErroSnapshot as e:
         st.error(str(e))
         st.stop()
@@ -181,7 +192,6 @@ else:
     lim_ini, lim_fim = date(2026, 7, 1), date(2026, 9, 30)
     padrao = (lim_ini, lim_fim)
 
-c1, c2, c3, c4 = st.columns([3, 1.2, 1.6, 4])
 with c1:
     per = st.date_input("Período", value=padrao, min_value=lim_ini, max_value=lim_fim, format="DD/MM/YYYY")
 if not isinstance(per, (list, tuple)) or len(per) != 2:

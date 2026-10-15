@@ -33,11 +33,13 @@ EP_ESTOQUE = "/estoque/consulta/"
 # Operações que não entram no faturamento de vendas (remessa etc.)
 OP_EXCLUIDAS = frozenset({"14", "16", "24", "04"})
 
-# Itens de NF de saída que não são venda: transferências e devoluções (de transferência ou de compra)
+# Itens de NF de saída que não são venda: transferências, devoluções (de transferência ou de compra),
+# bonificação/brinde, amostra grátis e outras saídas
 CFOP_SAIDA_NAO_VENDA = frozenset({
     "5151", "5152", "5155", "5156", "6151", "6152", "6155", "6156",
     "5201", "5202", "5208", "5209", "5210", "5410", "5411", "5409",
     "6201", "6202", "6208", "6209", "6210", "6410", "6411", "6409",
+    "5910", "5911", "5949", "6910", "6911", "6949",
 })
 # NF de entrada de devolução de venda: abate o faturamento na data da devolução
 CFOP_DEVOLUCAO_VENDA = frozenset({"1201", "1202", "1410", "1411", "2201", "2202", "2410", "2411"})
@@ -46,11 +48,37 @@ POR_PAGINA_NF = 50
 POR_PAGINA_CUPOM = 100
 
 
+# Empresa ativa: "" = filial (OMIE_APP_KEY), "matriz" = OMIE_MATRIZ_APP_KEY. As chamadas de uma
+# empresa rodam em sequência (publicar_dados.py), então um global basta, inclusive nas threads de _paginar.
+EMPRESAS = {"filial": "", "matriz": "matriz"}
+_empresa = ""
+
+
+def usar_empresa(empresa: str) -> None:
+    global _empresa
+    _empresa = EMPRESAS[empresa]
+
+
+def carregar_chaves_matriz_local() -> None:
+    """No PC, as chaves da matriz ficam no .env do projeto de estoque (pasta acima); só são lidas, nunca copiadas."""
+    if os.getenv("OMIE_MATRIZ_APP_KEY"):
+        return
+    from dotenv import dotenv_values
+
+    env = Path(os.getenv("OMIE_MATRIZ_ENV") or Path(__file__).resolve().parents[4] / ".env")
+    if env.exists():
+        v = dotenv_values(env)
+        if v.get("OMIE_APP_KEY") and v.get("OMIE_APP_SECRET"):
+            os.environ["OMIE_MATRIZ_APP_KEY"] = v["OMIE_APP_KEY"].strip()
+            os.environ["OMIE_MATRIZ_APP_SECRET"] = v["OMIE_APP_SECRET"].strip()
+
+
 def _credenciais() -> tuple[str, str]:
-    k = (os.getenv("OMIE_APP_KEY") or "").strip()
-    s = (os.getenv("OMIE_APP_SECRET") or "").strip()
+    pre = f"OMIE_{_empresa.upper()}_" if _empresa else "OMIE_"
+    k = (os.getenv(pre + "APP_KEY") or "").strip()
+    s = (os.getenv(pre + "APP_SECRET") or "").strip()
     if not k or not s:
-        raise RuntimeError("OMIE_APP_KEY e OMIE_APP_SECRET não configurados no .env")
+        raise RuntimeError(f"{pre}APP_KEY e {pre}APP_SECRET não configurados")
     return k, s
 
 
@@ -65,11 +93,12 @@ _http = httpx.Client(transport=httpx.HTTPTransport(local_address="0.0.0.0"),
                      timeout=httpx.Timeout(120, connect=15))
 
 
-def _post(call: str, endpoint: str, param: dict, tentativas: int = 3) -> dict:
+def _post(call: str, endpoint: str, param: dict, tentativas: int = 6) -> dict:
     if call not in READ_ONLY_CALLS:
         raise PermissionError(f"Método Omie não permitido (somente leitura): {call}")
-    if time.time() < _bloqueado_ate.get(call, 0):
-        raise OmieBloqueada(f"Omie ({call}) bloqueada até {time.strftime('%H:%M', time.localtime(_bloqueado_ate[call]))}")
+    trava = f"{_empresa}:{call}"
+    if time.time() < _bloqueado_ate.get(trava, 0):
+        raise OmieBloqueada(f"Omie ({call}) bloqueada até {time.strftime('%H:%M', time.localtime(_bloqueado_ate[trava]))}")
     app_key, app_secret = _credenciais()
     corpo = {
         "call": call,
@@ -93,9 +122,14 @@ def _post(call: str, endpoint: str, param: dict, tentativas: int = 3) -> dict:
         falha = data.get("faultstring") if isinstance(data, dict) else None
         if r.status_code == 425 or "MISUSE" in str(data.get("faultcode", "") if isinstance(data, dict) else ""):
             m = re.search(r"(\d+)\s*segundos", falha or "")
-            _bloqueado_ate[call] = time.time() + (int(m.group(1)) if m else 900)
+            _bloqueado_ate[trava] = time.time() + (int(m.group(1)) if m else 900)
             raise OmieBloqueada(f"Omie ({call}): {falha}")
         if falha:
+            # o mesmo método ainda em processamento na Omie (comum no ListarPosEstoque): aguarda e repete
+            if ("requisição desse método sendo executada" in falha or "REDUNDANT" in falha) and i < tentativas - 1:
+                m = re.search(r"(\d+)\s*segundos", falha)
+                time.sleep(int(m.group(1)) + 1 if m else 5 * (i + 1))
+                continue
             raise RuntimeError(f"Omie ({call}): {falha}")
         if r.status_code in (429, 502, 503, 504) and i < tentativas - 1:
             time.sleep(3 * (i + 1))
@@ -138,7 +172,11 @@ def _texto(s: str) -> str:
     return html.unescape((s or "").strip())
 
 
-CACHE_PEDIDOS = Path(__file__).resolve().parents[1] / "data" / "cache_pedidos.json"
+PASTA_DADOS = Path(__file__).resolve().parents[1] / "data"
+
+
+def _arquivo_cache_pedidos() -> Path:
+    return PASTA_DADOS / (f"cache_pedidos_{_empresa}.json" if _empresa else "cache_pedidos.json")
 
 
 def _consultar_consumidor(id_pedido: int) -> bool:
@@ -153,9 +191,10 @@ class _CachePedidos:
 
     def __init__(self) -> None:
         self._consumidor: dict[int, bool] = {}
-        if CACHE_PEDIDOS.exists():
+        self._arquivo = _arquivo_cache_pedidos()
+        if self._arquivo.exists():
             try:
-                raw = json.loads(CACHE_PEDIDOS.read_text(encoding="utf-8"))
+                raw = json.loads(self._arquivo.read_text(encoding="utf-8"))
                 self._consumidor = {int(k): bool(v) for k, v in raw.items()}
             except (ValueError, OSError):
                 self._consumidor = {}
@@ -165,7 +204,11 @@ class _CachePedidos:
         if not faltam:
             return
         # Sequencial: ConsultarPedido em paralelo/repetido faz a Omie bloquear o método.
+        # PEDIDOS_MAX_SEG limita o tempo por execução; o que faltar é consultado nas próximas.
+        limite = time.time() + float(os.getenv("PEDIDOS_MAX_SEG") or "inf")
         for i in faltam:
+            if time.time() > limite:
+                break
             try:
                 self._consumidor[i] = _consultar_consumidor(i)
             except OmieBloqueada:
@@ -173,8 +216,8 @@ class _CachePedidos:
             except RuntimeError:
                 continue
             time.sleep(0.3)
-        CACHE_PEDIDOS.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PEDIDOS.write_text(
+        self._arquivo.parent.mkdir(parents=True, exist_ok=True)
+        self._arquivo.write_text(
             json.dumps({str(k): v for k, v in self._consumidor.items()}), encoding="utf-8"
         )
 
@@ -208,13 +251,13 @@ def _cliente_nf(nf: dict) -> str:
     return _texto(dest.get("cRazao") or dest.get("cNome") or "")
 
 
-def _paginar(call: str, endpoint: str, param, lista: str, total_paginas: str) -> list[dict]:
+def _paginar(call: str, endpoint: str, param, lista: str, total_paginas: str, paralelo: int = 4) -> list[dict]:
     """Busca a página 1 e as demais em paralelo (máx. 4 simultâneas por método no Omie)."""
     primeira = _post(call, endpoint, param(1))
     out = list(primeira.get(lista) or [])
     total = int(primeira.get(total_paginas) or 1)
     if total > 1:
-        with ThreadPoolExecutor(max_workers=4) as ex:
+        with ThreadPoolExecutor(max_workers=paralelo) as ex:
             for resp in ex.map(lambda p: _post(call, endpoint, param(p)), range(2, total + 1)):
                 out.extend(resp.get(lista) or [])
     return out
@@ -385,6 +428,7 @@ def estoque_atual() -> list[dict]:
         lambda p: {"nPagina": p, "nRegPorPagina": 100, "dDataPosicao": _br(hoje), "cExibeTodos": "N"},
         "produtos",
         "nTotPaginas",
+        paralelo=1,  # ListarPosEstoque recusa chamadas simultâneas
     )
     por_produto: dict[str, dict] = {}
     for it in itens:

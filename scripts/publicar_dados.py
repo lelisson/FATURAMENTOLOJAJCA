@@ -64,7 +64,14 @@ def git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=PASTA, capture_output=True, text=True, creationflags=SEM_JANELA)
 
 
-def publicar(blob: bytes, carimbo: str) -> None:
+# empresa → (arquivo no branch `dados`, variável com o nome exibido, nome padrão)
+EMPRESAS = {
+    "filial": ("painel.enc", "OMIE_EMPRESA", "JCA Filial"),
+    "matriz": ("painel_matriz.enc", "OMIE_EMPRESA_MATRIZ", "JCA Matriz"),
+}
+
+
+def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
     PASTA.mkdir(parents=True, exist_ok=True)
     if not (PASTA / ".git").exists():
         git("init", "-q", "-b", "dados")
@@ -72,7 +79,11 @@ def publicar(blob: bytes, carimbo: str) -> None:
         if NO_ACTIONS:
             git("config", "user.name", "github-actions[bot]")
             git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-    (PASTA / "painel.enc").write_bytes(blob)
+    # Parte do que já está publicado: a empresa que falhar nesta execução mantém o arquivo anterior.
+    if git("fetch", "-q", "--depth", "1", "origin", "dados").returncode == 0:
+        git("reset", "-q", "--hard", "FETCH_HEAD")
+    for arquivo, blob in blobs.items():
+        (PASTA / arquivo).write_bytes(blob)
     (PASTA / "README.md").write_text("Dados do painel, criptografados e atualizados automaticamente. Não editar.\n",
                                      encoding="utf-8")
     git("add", "-A")
@@ -83,41 +94,63 @@ def publicar(blob: bytes, carimbo: str) -> None:
         raise RuntimeError("git push falhou: " + (r.stderr or "").replace(REMOTO, "<remoto>").strip()[-300:])
 
 
-def main() -> int:
-    chave = os.getenv("PAINEL_DATA_KEY")
-    if not chave:
-        log("PAINEL_DATA_KEY ausente no .env")
-        return 1
-    hoje = date.today()
+def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
+    _, var_nome, nome_padrao = EMPRESAS[empresa]
+    omie.usar_empresa(empresa)
+    try:
+        omie._credenciais()
+    except RuntimeError:
+        log(f"{empresa}: chaves não configuradas; mantém os dados anteriores")
+        return None
     ini_padrao = ini = inicio_padrao(hoje)
     t0 = time.time()
     try:
         rows = omie.vendas(ini.isoformat(), hoje.isoformat())
     except omie.OmieBloqueada:
-        log("Omie bloqueou temporariamente; tenta de novo na próxima execução")
-        return 0
+        log(f"{empresa}: Omie bloqueou temporariamente; tenta de novo na próxima execução")
+        return None
     except Exception as e:  # mensagens da Omie não contêm as chaves; mesmo assim só o tipo vai para o log
-        log(f"falha ao consultar a Omie: {type(e).__name__}")
-        return 1
+        log(f"{empresa}: falha ao consultar a Omie: {type(e).__name__}")
+        return None
     try:
         est = omie.estoque_atual()
     except Exception:
         est = None
-    carimbo = time.strftime("%d/%m/%Y %H:%M")
     dados = {
-        "gerado_em": carimbo, "empresa": os.getenv("OMIE_EMPRESA", "JCA Filial"),
+        "gerado_em": time.strftime("%d/%m/%Y %H:%M"), "empresa": os.getenv(var_nome, nome_padrao),
         "inicio": ini.isoformat(), "fim": hoje.isoformat(), "inicio_padrao": ini_padrao.isoformat(),
         "rows": rows, "estoque": est,
     }
     bruto = json.dumps(dados, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    blob = Fernet(chave.encode()).encrypt(gzip.compress(bruto))
+    blob = fernet.encrypt(gzip.compress(bruto))
+    log(f"{empresa}: {len(rows)} itens de {ini:%d/%m/%Y} a {hoje:%d/%m/%Y}, {len(blob) // 1024} KB, "
+        f"{time.time() - t0:.0f}s")
+    return blob
+
+
+def main() -> int:
+    chave = os.getenv("PAINEL_DATA_KEY")
+    if not chave:
+        log("PAINEL_DATA_KEY ausente")
+        return 1
+    if not NO_ACTIONS:
+        omie.carregar_chaves_matriz_local()
+    fernet = Fernet(chave.encode())
+    hoje = date.today()
+    blobs = {}
+    for empresa, (arquivo, _, _) in EMPRESAS.items():
+        blob = gerar(empresa, fernet, hoje)
+        if blob:
+            blobs[arquivo] = blob
+    if not blobs:
+        return 1
     try:
-        publicar(blob, carimbo)
+        publicar(blobs, time.strftime("%d/%m/%Y %H:%M"))
     except Exception as e:
         log(f"falha ao publicar: {e}")
         return 1
-    log(f"ok: {len(rows)} itens de {ini:%d/%m/%Y} a {hoje:%d/%m/%Y}, {len(blob) // 1024} KB, {time.time() - t0:.0f}s")
-    return 0
+    log(f"ok: publicado {', '.join(blobs)}")
+    return 0 if len(blobs) == len(EMPRESAS) else 1
 
 
 if __name__ == "__main__":
