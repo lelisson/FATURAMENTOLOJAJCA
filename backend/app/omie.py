@@ -222,6 +222,9 @@ class _CachePedidos:
     def consumidor_final(self, id_pedido: int) -> bool:
         return self._consumidor.get(id_pedido, False)
 
+    def conhecido(self, id_pedido: int) -> bool:
+        return not id_pedido or id_pedido in self._consumidor
+
 
 def _cancelada_nf(nf: dict) -> bool:
     ide = nf.get("ide") or {}
@@ -306,15 +309,14 @@ def listar_cupons_bruto(inicio: str, fim: str) -> list[dict]:
     )
 
 
-def mapear_nf(nf: dict, pedidos: _CachePedidos) -> list[dict]:
-    if _cancelada_nf(nf):
-        return []
-    op = _codigo_operacao(nf)
-    if op in OP_EXCLUIDAS:
-        return []
+def _nf_de_venda(nf: dict) -> bool:
     # Pedido devolvido continua como venda no mês dele; a NF de devolução abate no mês da devolução.
-    ped = nf.get("pedido") or {}
-    if _sim(ped.get("cCancelado")):
+    return not (_cancelada_nf(nf) or _codigo_operacao(nf) in OP_EXCLUIDAS
+                or _sim((nf.get("pedido") or {}).get("cCancelado")))
+
+
+def mapear_nf(nf: dict, pedidos: _CachePedidos) -> list[dict]:
+    if not _nf_de_venda(nf):
         return []
 
     ide = nf.get("ide") or {}
@@ -394,7 +396,10 @@ def mapear_cupom(cupom: dict) -> list[dict]:
     return linhas
 
 
-def vendas(inicio: str, fim: str) -> list[dict]:
+def _coletar(inicio: str, fim: str, anteriores: list[dict] = ()) -> tuple[list[dict], set[str]]:
+    """Linhas do período e os meses (AAAA-MM) com pedidos cujo consumidor_final ainda não foi consultado.
+
+    `anteriores` são linhas já conhecidas de antes de `inicio`, usadas só para o canal das devoluções."""
     pedidos = _CachePedidos()
     # Saídas e entradas em sequência: ListarNF aceita no máximo 4 chamadas simultâneas.
     def _nfs() -> tuple[list[dict], list[dict]]:
@@ -404,17 +409,59 @@ def vendas(inicio: str, fim: str) -> list[dict]:
         f_nf = ex.submit(_nfs)
         f_cup = ex.submit(listar_cupons_bruto, inicio, fim)
         (nfs, entradas), cupons = f_nf.result(), f_cup.result()
-    pedidos.carregar({int((nf.get("compl") or {}).get("nIdPedido") or 0) for nf in nfs})
+
+    def _id_ped(nf: dict) -> int:
+        return int((nf.get("compl") or {}).get("nIdPedido") or 0)
+
+    nfs = [nf for nf in nfs if _nf_de_venda(nf)]
+    pedidos.carregar({_id_ped(nf) for nf in nfs})
+    pendentes = {_iso_br(str((nf.get("ide") or {}).get("dEmi") or ""))[:7]
+                 for nf in nfs if not pedidos.conhecido(_id_ped(nf))}
     out: list[dict] = []
     for nf in nfs:
         out.extend(mapear_nf(nf, pedidos))
     for cupom in cupons:
         out.extend(mapear_cupom(cupom))
     canal_cliente = {r["c"]: (r["ch"] == "PDV", r["ch"] == "Pedido – consumo final")
-                     for r in sorted(out, key=lambda r: r["d"])}
+                     for r in sorted([*anteriores, *out], key=lambda r: r["d"]) if not r.get("dv")}
     for nf in entradas:
         out.extend(mapear_devolucao(nf, canal_cliente))
-    return out
+    return out, pendentes
+
+
+def vendas(inicio: str, fim: str) -> list[dict]:
+    return _coletar(inicio, fim)[0]
+
+
+def _proximo_mes(mes: str) -> str:
+    a, m = int(mes[:4]), int(mes[5:7])
+    return f"{a + m // 12}-{m % 12 + 1:02d}"
+
+
+def vendas_congelando(inicio: str, fim: str, congelado: dict[str, list[dict]],
+                      fechado_ate: str) -> tuple[list[dict], dict[str, list[dict]]]:
+    """Como vendas(), mas sem consultar de novo os meses já em `congelado` (AAAA-MM → linhas).
+
+    Devolve as linhas e o novo `congelado`: meses anteriores a `fechado_ate`, inteiros dentro do período
+    e com todos os pedidos já consultados."""
+    congelado = {m: r for m, r in congelado.items() if f"{m}-01" >= inicio and m < fechado_ate}
+    mes = inicio[:7]
+    while mes in congelado:
+        mes = _proximo_mes(mes)
+    anteriores = [r for m in sorted(congelado) if m < mes for r in congelado[m]]
+    desde = max(inicio, f"{mes}-01")
+    if desde > fim:
+        return anteriores, congelado
+    novos, pendentes = _coletar(desde, fim, anteriores)
+    novo = {m: congelado[m] for m in congelado if m < mes}
+    por_mes: dict[str, list[dict]] = {}
+    for r in novos:
+        por_mes.setdefault(r["d"][:7], []).append(r)
+    while mes < fechado_ate and f"{mes}-01" <= fim:
+        if f"{mes}-01" >= inicio and mes not in pendentes:
+            novo[mes] = por_mes.get(mes, [])
+        mes = _proximo_mes(mes)
+    return anteriores + novos, novo
 
 
 def estoque_atual() -> list[dict]:

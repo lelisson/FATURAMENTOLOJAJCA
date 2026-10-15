@@ -5,6 +5,7 @@
 # dados reais da empresa (só neste PC)
 backend/data/raw_*.json
 backend/data/cache_*.json
+backend/data/cache_*.enc
 backend/data/vendas_sample.json
 relatorios/
 backup/

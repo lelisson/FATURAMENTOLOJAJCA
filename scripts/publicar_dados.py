@@ -94,6 +94,41 @@ def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
         raise RuntimeError("git push falhou: " + (r.stderr or "").replace(REMOTO, "<remoto>").strip()[-300:])
 
 
+# Meses fechados não são consultados de novo. Mude VERSAO_CONGELADO quando a regra de faturamento mudar.
+VERSAO_CONGELADO = 1
+DIA_FECHAMENTO = int(os.getenv("DIA_FECHAMENTO", "5"))
+
+
+def mes_fechado_ate(hoje: date) -> str:
+    """Meses anteriores ao retornado (AAAA-MM) estão fechados; o anterior fecha no DIA_FECHAMENTO do mês."""
+    if hoje.day >= DIA_FECHAMENTO:
+        return f"{hoje:%Y-%m}"
+    return f"{hoje.year - (hoje.month == 1)}-{(hoje.month - 2) % 12 + 1:02d}"
+
+
+def arquivo_congelado(empresa: str) -> Path:
+    return omie.PASTA_DADOS / f"cache_congelado_{empresa}.enc"
+
+
+def ler_congelado(empresa: str, fernet: Fernet) -> dict[str, list[dict]]:
+    arq = arquivo_congelado(empresa)
+    if os.getenv("REPROCESSAR") == "true" or not arq.exists():
+        return {}
+    try:
+        dados = json.loads(gzip.decompress(fernet.decrypt(arq.read_bytes())))
+    except Exception:
+        return {}
+    return dados["meses"] if dados.get("versao") == VERSAO_CONGELADO else {}
+
+
+def gravar_congelado(empresa: str, fernet: Fernet, meses: dict[str, list[dict]]) -> None:
+    bruto = json.dumps({"versao": VERSAO_CONGELADO, "meses": meses}, ensure_ascii=False,
+                       separators=(",", ":")).encode("utf-8")
+    arq = arquivo_congelado(empresa)
+    arq.parent.mkdir(parents=True, exist_ok=True)
+    arq.write_bytes(fernet.encrypt(gzip.compress(bruto)))
+
+
 def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
     _, var_nome, nome_padrao = EMPRESAS[empresa]
     omie.usar_empresa(empresa)
@@ -104,14 +139,17 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
         return None
     ini_padrao = ini = inicio_padrao(hoje)
     t0 = time.time()
+    congelado = ler_congelado(empresa, fernet)
     try:
-        rows = omie.vendas(ini.isoformat(), hoje.isoformat())
+        rows, congelado_novo = omie.vendas_congelando(ini.isoformat(), hoje.isoformat(), congelado,
+                                                      mes_fechado_ate(hoje))
     except omie.OmieBloqueada:
         log(f"{empresa}: Omie bloqueou temporariamente; tenta de novo na próxima execução")
         return None
     except Exception as e:  # mensagens da Omie não contêm as chaves; mesmo assim só o tipo vai para o log
         log(f"{empresa}: falha ao consultar a Omie: {type(e).__name__}")
         return None
+    gravar_congelado(empresa, fernet, congelado_novo)
     try:
         est = omie.estoque_atual()
     except Exception:
@@ -124,7 +162,8 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
     bruto = json.dumps(dados, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     blob = fernet.encrypt(gzip.compress(bruto))
     log(f"{empresa}: {len(rows)} itens de {ini:%d/%m/%Y} a {hoje:%d/%m/%Y}, {len(blob) // 1024} KB, "
-        f"{time.time() - t0:.0f}s")
+        f"{time.time() - t0:.0f}s; meses congelados: {', '.join(sorted(congelado_novo)) or 'nenhum'} "
+        f"(reaproveitados: {len(congelado)})")
     return blob
 
 
