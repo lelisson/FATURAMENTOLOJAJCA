@@ -2,7 +2,8 @@ name: Publicar dados do painel
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # Fora dos minutos :00/:30, quando o GitHub mais atrasa ou descarta execuções agendadas
+    - cron: "17,47 * * * *"
   workflow_dispatch:
 
 permissions:

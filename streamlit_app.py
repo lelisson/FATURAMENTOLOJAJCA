@@ -199,7 +199,7 @@ if snap is not None:
     rows = [r for r in snap["rows"] if inicio <= r["d"] <= fim]
     rows_prev = [r for r in snap["rows"] if p_ini <= r["d"] <= p_fim] if p_ini >= snap["inicio"] else []
     est = snap.get("estoque") if fim == snap["fim"] else None
-    atualizado, fonte_painel, fonte_txt = snap["gerado_em"], "omie", "Omie (publicado a cada 30 min)"
+    atualizado, fonte_painel, fonte_txt = snap["gerado_em"], "omie", "Omie (atualização automática)"
 else:
     try:
         with st.spinner("Consultando a Omie (a primeira carga pode levar alguns minutos)…"):
