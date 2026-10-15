@@ -222,6 +222,8 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
             + kpi("Ticket médio", brl(A["tk"]), A["tk"], P["tk"], brl)
             + kpi("Itens faturados", num(A["items"]), A["items"], P["items"], num))
 
+    tem_pdv = "matriz" not in empresa.lower()
+    canais = CANAIS if tem_pdv else tuple(c for c in CANAIS if c != "PDV")
     cores_can = dict(zip(CANAIS, CORES))
     canal_linhas = "".join(
         f'<tr><td><i class="sw" style="background:{cores_can[c]}"></i>{CANAL_NOME[c]}</td>'
@@ -229,7 +231,7 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
         f'<td class="n">{num(can.get(c, {}).get("n", 0))}</td>'
         f'<td class="n">{brl(can[c]["t"] / can[c]["n"]) if c in can and can[c]["n"] else "—"}</td>'
         f'<td class="n">{var_html(var(can.get(c, {}).get("t", 0), can_p.get(c, {}).get("t", 0)))}</td></tr>'
-        for c in CANAIS)
+        for c in canais)
 
     fam_html = barras([(k, o["t"], var_html(var(o["t"], fam_p.get(k, {}).get("t", 0)))) for k, o in fams], A["t"])
 
@@ -249,7 +251,6 @@ def gerar(rows, rows_prev, inicio, fim, prev_inicio, prev_fim, empresa, atualiza
 
     pdv_t = can.get("PDV", {}).get("t", 0)
     anon_t = sum(r["x"] for r in rows if r["c"] == ANON)
-    tem_pdv = "matriz" not in empresa.lower()
 
     return f"""<!doctype html>
 <html lang="pt-BR">
@@ -330,7 +331,7 @@ footer{{border-top:1px solid #e5e7ef;padding:14px 40px;color:#94a3b8;font-size:1
   <section class="blk"><h2>Faturamento diário <small>{escape(titulo)}</small></h2>{svg_diario(inicio, fim, rows)}</section>
 
   <section class="blk"><h2>Canais de venda</h2>
-    {svg_empilhada([(CANAL_NOME[c], can.get(c, {}).get("t", 0), cores_can[c]) for c in CANAIS])}
+    {svg_empilhada([(CANAL_NOME[c], can.get(c, {}).get("t", 0), cores_can[c]) for c in canais])}
     <table><thead><tr><th>Canal</th><th class="n">Faturamento</th><th class="n">Part.</th><th class="n">Vendas</th><th class="n">Ticket</th><th class="n">Var.</th></tr></thead>
     <tbody>{canal_linhas}<tr class="tot"><td>Total</td><td class="n">{brl(A["t"])}</td><td class="n">100,0%</td><td class="n">{num(A["n"])}</td><td class="n">{brl(A["tk"])}</td><td class="n">{var_html(dv)}</td></tr></tbody></table>
   </section>

@@ -476,11 +476,11 @@ function renderEvo(){
     const F=[...W].sort((a,b)=>b.t-a.t);
     $('evoCall').innerHTML=F.length?`<span class="pill">Melhor semana <b>${dm(F[0].k)}</b> ${brl(F[0].t)}</span><span class="pill">Média semanal <b>${brl(agg(D).t/W.length)}</b></span>`:'';
   }
-  const Dc=sel({canal:false}),tot=agg(Dc).t,cc=cols(),parts=CH.map(c=>agg(Dc.filter(r=>r.ch===c)));
-  mk('cMix',{type:'doughnut',data:{labels:CH.map(c=>CHN[c]),datasets:[{data:parts.map(x=>x.t),backgroundColor:cc,borderColor:css('--surface'),borderWidth:3,hoverOffset:4}]},
+  const Dc=sel({canal:false}),tot=agg(Dc).t,chs=canais(),cc=chs.map(corCanal),parts=chs.map(c=>agg(Dc.filter(r=>r.ch===c)));
+  mk('cMix',{type:'doughnut',data:{labels:chs.map(c=>CHN[c]),datasets:[{data:parts.map(x=>x.t),backgroundColor:cc,borderColor:css('--surface'),borderWidth:3,hoverOffset:4}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'74%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${brl(c.parsed)} · ${tot?pct(c.parsed/tot):'—'}`}}}}});
   $('mixC').innerHTML=`<div><b>${brk(tot)}</b><span>${num(agg(Dc).n)} vendas</span></div>`;
-  $('mixLeg').innerHTML=CH.map((c,i)=>`<div><i style="background:${cc[i]}"></i><span>${CHN[c]}</span><span class="v">${brl(parts[i].t)}</span><span class="p">${tot?pct(parts[i].t/tot):'—'}</span></div>`).join('');
+  $('mixLeg').innerHTML=chs.map((c,i)=>`<div><i style="background:${cc[i]}"></i><span>${CHN[c]}</span><span class="v">${brl(parts[i].t)}</span><span class="p">${tot?pct(parts[i].t/tot):'—'}</span></div>`).join('');
 }
 
 /* ---------- rankings ---------- */
