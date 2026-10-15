@@ -226,9 +226,15 @@ else:
     fonte_painel = FONTE
     fonte_txt = "Omie" if FONTE == "omie" else "dados fictícios de demonstração"
 
+# PDV/NFC-e só na Filial; o flag vai no HTML para o filtro/gráfico sumirem na Matriz.
+tem_pdv = empresa == "Filial"
+if tem_pdv is False:
+    rows = [r for r in rows if r.get("ch") != "PDV"]
+    rows_prev = [r for r in rows_prev if r.get("ch") != "PDV"]
 html_app = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
-                              modo="app")
-html_rel = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est)
+                              modo="app", tem_pdv=tem_pdv)
+html_rel = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
+                              tem_pdv=tem_pdv)
 with c3:
     st.download_button("Baixar relatório (HTML)", html_rel, use_container_width=True,
                        file_name=f"Relatorio_Vendas_{EMPRESA.replace(' ', '_')}_{inicio}_a_{fim}.html", mime="text/html")

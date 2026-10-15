@@ -13,14 +13,16 @@ TAG_CHART = '<script src="/vendor/chart.umd.min.js"></script>'
 
 
 def montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, empresa, atualizado, fonte, estoque=None,
-                modo: str = "relatorio") -> str:
+                modo: str = "relatorio", tem_pdv: bool | None = None) -> str:
     titulo_prev = relatorio.nome_periodo(p_ini, p_fim)
+    if tem_pdv is None:
+        tem_pdv = "matriz" not in (empresa or "").lower()
     dados = {
         "rows": rows, "prev": rows_prev, "inicio": inicio, "fim": fim,
         "prev_inicio": p_ini, "prev_fim": p_fim, "fonte": fonte, "empresa": empresa,
         "titulo": relatorio.nome_periodo(inicio, fim),
         "prev_label": titulo_prev[0].lower() + titulo_prev[1:] if titulo_prev[0].isalpha() else titulo_prev,
-        "atualizado_em": atualizado, "estoque": estoque, "modo": modo,
+        "atualizado_em": atualizado, "estoque": estoque, "modo": modo, "tem_pdv": bool(tem_pdv),
     }
     html = (FRONT / "index.html").read_text(encoding="utf-8")
     if TAG_CHART not in html:

@@ -329,7 +329,11 @@ const CH=['PDV','Pedido – consumo final','Pedido – empresas'];
 const CHN={'PDV':'PDV','Pedido – consumo final':'Consumidor final','Pedido – empresas':'Empresas'};
 const ANON='Cliente Consumidor / Sem Tomador';
 const st={m:'all',ch:'all',fam:'all',cli:'all',evo:'m',prod:'x',q:''};
-const temPdv=()=>!/matriz/i.test(PER.empresa||'');
+// Matriz não tem PDV: flag explícito (tem_pdv) ou nome da empresa no snapshot/PER.
+const temPdv=()=>{
+  if(S&&Object.prototype.hasOwnProperty.call(S,'tem_pdv'))return!!S.tem_pdv;
+  return !/matriz/i.test((S&&S.empresa)||PER.empresa||'');
+};
 const canais=()=>temPdv()?CH:CH.filter(c=>c!=='PDV');
 const corCanal=c=>cols()[CH.indexOf(c)];
 
@@ -620,8 +624,11 @@ document.querySelectorAll('.main section').forEach(s=>spy.observe(s));
 function render(){if(!window.Chart)return;base();renderKPIs();renderEvo();renderRank();renderChannels();renderTables();renderOport()}
 let refreshTimer=null;
 function loadStatic(){
-  R=S.rows;Object.assign(PER,{inicio:S.inicio,fim:S.fim,fonte:S.fonte,empresa:S.empresa,meses:mesesNoPeriodo(S.inicio,S.fim)});
-  $('empresa').textContent=S.empresa;document.title=`Relatório de vendas · ${S.empresa} · ${S.titulo}`;
+  // Sem PDV na matriz: ignora linhas de cupom se ainda existirem em snapshot antigo
+  R=temPdv()?S.rows:S.rows.filter(r=>r.ch!=='PDV');
+  Object.assign(PER,{inicio:S.inicio,fim:S.fim,fonte:S.fonte,empresa:S.empresa||PER.empresa,meses:mesesNoPeriodo(S.inicio,S.fim)});
+  if(!temPdv()&&st.ch==='PDV')st.ch='all';
+  $('empresa').textContent=PER.empresa;document.title=`Relatório de vendas · ${PER.empresa} · ${S.titulo}`;
   document.querySelector('.bar h1').textContent=S.modo==='app'?'Painel de vendas':'Relatório de vendas · '+S.titulo;
   $('periodo').textContent=`${dbr(S.inicio)} a ${dbr(S.fim)}`+(temPrev()?` · comparativo com ${dbr(S.prev_inicio)} a ${dbr(S.prev_fim)}`:'');
   $('status').classList.remove('busy');$('status').querySelector('.dot').style.animation='none';

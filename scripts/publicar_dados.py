@@ -170,7 +170,7 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
     dados = {
         "gerado_em": time.strftime("%d/%m/%Y %H:%M"), "empresa": os.getenv(var_nome, nome_padrao),
         "inicio": ini.isoformat(), "fim": hoje.isoformat(), "inicio_padrao": ini_padrao.isoformat(),
-        "rows": rows, "estoque": est,
+        "rows": rows, "estoque": est, "tem_pdv": empresa == "filial",
     }
     bruto = json.dumps(dados, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     blob = fernet.encrypt(gzip.compress(bruto))
