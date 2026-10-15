@@ -29,7 +29,7 @@ jobs:
       OMIE_EMPRESA_MATRIZ: JCA Matriz
       # tempo máximo de ConsultarPedido por empresa a cada execução; o restante fica para as próximas
       PEDIDOS_MAX_SEG: "600"
-      # meses fechados (a partir do dia 5 do mês seguinte) ficam congelados no cache, cifrados
+      # meses fechados (após o dia 1 às 23:59 do mês seguinte) ficam congelados no cache, cifrados
       REPROCESSAR: ${{ inputs.reprocessar }}
       OMIE_FILIAL_APP_KEY: ${{ secrets.OMIE_APP_KEY }}
       OMIE_FILIAL_APP_SECRET: ${{ secrets.OMIE_APP_SECRET }}

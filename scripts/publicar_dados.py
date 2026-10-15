@@ -96,7 +96,8 @@ def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
 
 # Meses fechados não são consultados de novo. Mude VERSAO_CONGELADO quando a regra de faturamento mudar.
 VERSAO_CONGELADO = 1
-DIA_FECHAMENTO = int(os.getenv("DIA_FECHAMENTO", "5"))
+# Mês anterior fecha no dia 1 às 23:59 (NF-e pode ser cancelada em até 24 h da autorização).
+DIA_FECHAMENTO = int(os.getenv("DIA_FECHAMENTO", "2"))
 
 
 def mes_fechado_ate(hoje: date) -> str:
