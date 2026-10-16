@@ -107,7 +107,7 @@ def main() -> None:
     story.append(Paragraph("2.2 Arquitetura", st["H2"]))
     bullets(story, st, [
         "<b>Coleta:</b> GitHub Actions executa scripts/publicar_dados.py "
-        "(cron aproximado a cada 30 min, minutos 17 e 47).",
+        "a cada 20 min (cada execução agenda a próxima; cron nos minutos 7, 27 e 47 como reserva).",
         "<b>Fonte:</b> Omie API — ListarNF (saídas e entradas), CuponsFiscais (só filial), "
         "ConsultarPedido (canal consumidor final), ListarPosEstoque.",
         "<b>Publicação:</b> JSON compactado (gzip) + cifrado Fernet → painel.enc e "

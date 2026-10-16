@@ -2,8 +2,9 @@ name: Publicar dados do painel
 
 on:
   schedule:
-    # Fora dos minutos :00/:30, quando o GitHub mais atrasa ou descarta execuções agendadas
-    - cron: "17,47 * * * *"
+    # Reserva: o GitHub atrasa/pula agendamentos por horas; quem garante os 20 min é a corrente no fim do job.
+    # Fora dos minutos :00/:30, quando o GitHub mais atrasa ou descarta execuções agendadas.
+    - cron: "7,27,47 * * * *"
   workflow_dispatch:
     inputs:
       reprocessar:
@@ -13,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: publicar-dados
@@ -38,6 +40,8 @@ jobs:
       PAINEL_DATA_KEY: ${{ secrets.PAINEL_DATA_KEY }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -75,3 +79,14 @@ jobs:
         with:
           path: backend/data/cache_congelado_*.enc
           key: congelado-${{ github.run_id }}
+
+      # Próxima execução 20 min após o início desta. Cancelar uma execução manualmente interrompe a corrente
+      # (o cron acima a retoma); a concorrência mantém no máximo uma rodando e uma na fila.
+      - name: Agendar próxima atualização (20 min)
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          espera=$(( INICIO + 1200 - $(date +%s) ))
+          if [ "$espera" -gt 0 ]; then sleep "$espera"; fi
+          gh workflow run publicar.yml --repo "$GITHUB_REPOSITORY" --ref main
