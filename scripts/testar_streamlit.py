@@ -34,3 +34,19 @@ print("componentes de html:", len(html))
 print("erros:", [e.value for e in at.error])
 print("avisos:", [e.value for e in at.warning])
 print("campos de texto:", len(at.text_input))
+
+# Período digitado: válido, inválido e atalhos.
+de, ate = at.text_input(key="de"), at.text_input(key="ate")
+print("período inicial:", de.value, "a", ate.value)
+de.input("01/09/2026").run()
+ate = at.text_input(key="ate")
+ate.input("30/09/2026").run()
+assert not at.exception, at.exception
+print("setembro digitado:", [c.value for c in at.caption][-1:])
+at.text_input(key="de").input("31/02/2026").run()
+print("data inválida avisa:", any("Data inválida" in w.value for w in at.warning))
+for atalho in ("Mês anterior", "Trimestre", "Mês atual"):
+    at.text_input(key="de").input("01/10/2026").run()
+    at.button_group(key="atalho").set_value(atalho).run() if hasattr(at, "button_group") else None
+    print(f"atalho {atalho}:", at.text_input(key="de").value, "a", at.text_input(key="ate").value,
+          "| exceções:", len(at.exception))

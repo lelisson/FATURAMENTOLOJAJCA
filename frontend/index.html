@@ -152,6 +152,20 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
 .dlg-act{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .err{background:var(--bad-soft);color:var(--bad);border-radius:10px;padding:12px 14px;margin-top:18px}
 
+/* relatório de análise */
+#relBody{display:flex;flex-direction:column;gap:14px}
+#relBody .card>.grid{margin-top:12px}
+#relBody .tw{margin-top:10px}
+.rel-txt{font-size:13.5px;line-height:1.65;color:var(--ink2);margin:12px 0 0}
+.rel-txt b{color:var(--ink)}
+.rel-h4{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3);margin:16px 0 0}
+.sug{margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.sug li{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;font-size:13.5px;line-height:1.55;color:var(--ink2);padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}
+.sug li b{color:var(--ink)}
+.prio{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.prio.alta{color:var(--bad);background:var(--bad-soft)}.prio.media{color:var(--accent);background:var(--accent-soft)}.prio.baixa{color:var(--good);background:var(--good-soft)}
+.rel-nota{font-size:12px;color:var(--ink3);line-height:1.5}
+
 @media (max-width:1000px){
   .app{grid-template-columns:1fr}
   .side{position:static;height:auto;flex-direction:row;align-items:center;flex-wrap:wrap;padding:12px 16px;border-right:0;border-bottom:1px solid var(--line)}
@@ -165,6 +179,10 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
   .main{padding:0}.bar{position:static;backdrop-filter:none}
   .card,section .grid>*{break-inside:avoid}.tw{max-height:none;overflow:visible}
   section{padding-top:16px}
+  body:not(.so-rel) #relatorio{display:none!important}
+  body.so-rel .bar,body.so-rel .main>section:not(#relatorio){display:none!important}
+  body.so-rel #relatorio{padding-top:0}
+  .no-print{display:none!important}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}}
 </style>
@@ -179,6 +197,7 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
     <a href="#canais"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Canais</a>
     <a href="#oport" id="navOport" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4"/><circle cx="12" cy="12" r="3"/></svg>Oportunidades</a>
     <a href="#detalhe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>Detalhamento</a>
+    <a href="#relatorio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 17v-3M12 17v-6M16 17v-4"/></svg>Relatório</a>
   </nav>
   <div class="side-foot">
     <div class="status busy" id="status"><span class="dot"></span><span id="statusTxt">Carregando…</span></div>
@@ -287,6 +306,12 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
       <div class="tw" id="dRaw" hidden><table id="tRaw"></table></div>
       <div class="tw" id="dDev" hidden><table id="tDev"></table></div>
     </div>
+  </section>
+
+  <section id="relatorio">
+    <div class="sh"><h2>Relatório de análise</h2><span class="muted" id="relSub"></span>
+      <button class="btn pri no-print" id="relPrint" type="button">Imprimir / PDF</button></div>
+    <div id="relBody"></div>
   </section>
 </div>
 </div>
@@ -608,9 +633,219 @@ async function loadOport(){
     CUR=jc?{inicio:iniQ,fim:fimRef,rows:jc.rows}:null;
     if(jp)RP=jp.rows;
     EST=je&&je.fonte==='omie'?je.itens:null;
-    renderOport();
+    renderOport();renderRelatorio();
   }catch(e){$('opSub').textContent='Comparativo indisponível'}
 }
+
+/* ---------- relatório de análise ---------- */
+// Histórico completo (snapshot) para comparativos e previsão; sem ele, período anterior + atual.
+let H=[];
+const addDias=(s,n)=>{const t=new Date(Date.parse(s+'T00:00:00Z'));t.setUTCDate(t.getUTCDate()+n);return t.toISOString().slice(0,10)};
+const ultDia=s=>new Date(Date.UTC(+s.slice(0,4),+s.slice(5,7),0)).toISOString().slice(0,10);
+const ym=s=>s.slice(0,7);
+const ymMais=(k,n)=>{let y=+k.slice(0,4),m=+k.slice(5,7)+n;while(m>12){m-=12;y++}while(m<1){m+=12;y--}return `${y}-${String(m).padStart(2,'0')}`};
+const lblYm=k=>NOMES_CURTOS[+k.slice(5,7)]+'/'+k.slice(2,4);
+const nomeYm=k=>NOMES_MES[+k.slice(5,7)].toLowerCase();
+const mesesEntre=(a,b)=>{const out=[];for(let k=ym(a);k<=ym(b);k=ymMais(k,1))out.push(k);return out};
+const naJanela=(rows,a,b)=>rows.filter(r=>r.d>=a&&r.d<=b);
+const clientes=rows=>new Set(rows.filter(r=>!r.dv&&r.c!==ANON).map(r=>r.c));
+const lista=(xs,n=3)=>xs.slice(0,n).map(x=>`<b>${esc(short(x,40))}</b>`).join(', ');
+const sinal=v=>(v>=0?'+':'−')+brl(Math.abs(v));
+function tbl(head,rows,nums=[]){
+  return `<div class="tw"><table><thead><tr>${head.map((h,i)=>`<th class="${nums.includes(i)?'num':''}" style="cursor:default">${h}</th>`).join('')}</tr></thead><tbody>${
+    rows.length?rows.map(r=>'<tr>'+r.map((c,i)=>`<td class="${nums.includes(i)?'num':''}">${c}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${head.length}" class="empty">Nada a destacar</td></tr>`}</tbody></table></div>`;
+}
+const kc=(l,v,n,d)=>`<div class="card kpi flat"><div class="kpi-h"><span class="lab">${l}</span>${badge(d)}</div><div class="val">${v}</div><div class="note">${n}</div></div>`;
+// Mês do 1º dia em diante → mesmo intervalo de dias do mês anterior; outro período → mesma duração logo antes.
+function janelaAnterior(ini,fim){
+  if(ini.slice(8)==='01'&&ym(ini)===ym(fim)){
+    const pIni=ymMais(ym(ini),-1)+'-01',pUlt=ultDia(pIni);
+    const dia=fim===ultDia(fim)?+pUlt.slice(8):Math.min(+fim.slice(8),+pUlt.slice(8));
+    return [pIni,pIni.slice(0,8)+String(dia).padStart(2,'0')];
+  }
+  const n=dias(ini,fim);return [addDias(ini,-n),addDias(ini,-1)];
+}
+function serieDiaria(rows,ini,fim){
+  const m=new Map();rows.forEach(r=>m.set(r.d,(m.get(r.d)||0)+r.x));
+  const out=[];for(let d=ini;d<=fim;d=addDias(d,1))out.push({d,t:m.get(d)||0,w:new Date(Date.parse(d+'T00:00:00Z')).getUTCDay()});
+  return out;
+}
+// Fechamento do mês em andamento: realizado + média por dia da semana das últimas 8 semanas; faixa de ~80%.
+function projecaoMes(hist,iniDados,ref){
+  const fimM=ultDia(ref),iniM=ym(ref)+'-01';
+  if(ref>=fimM)return null;
+  const b0=addDias(ref,-55)<iniDados?iniDados:addDias(ref,-55),base=serieDiaria(hist,b0,ref);
+  if(base.length<21)return null;
+  const porDia=[0,1,2,3,4,5,6].map(w=>{const x=base.filter(b=>b.w===w).map(b=>b.t);return x.length?x.reduce((a,b)=>a+b,0)/x.length:0});
+  const res=base.map(b=>b.t-porDia[b.w]),sd=Math.sqrt(res.reduce((a,b)=>a+b*b,0)/Math.max(res.length-1,1));
+  const resto=serieDiaria([],addDias(ref,1),fimM),falta=resto.reduce((a,b)=>a+porDia[b.w],0);
+  const real=agg(naJanela(hist,iniM,ref)).t,margem=1.28*sd*Math.sqrt(resto.length);
+  const diasUteis=resto.filter(b=>porDia[b.w]>0).length,mediaUtil=diasUteis?falta/diasUteis:0;
+  return {k:ym(ref),real,proj:real+falta,min:Math.max(real,real+falta-margem),max:real+falta+margem,diasUteis,mediaUtil};
+}
+// Tendência linear dos meses fechados (mínimo 3).
+function tendenciaMeses(hist,iniDados,ref){
+  const fech=mesesEntre(iniDados,ref).filter(k=>k+'-01'>=iniDados&&ultDia(k+'-01')<=ref);
+  const tot=fech.map(k=>agg(hist.filter(r=>ym(r.d)===k)).t);
+  if(fech.length<3)return {fech,tot,ok:false};
+  const n=tot.length,xm=(n-1)/2,mm=tot.reduce((a,b)=>a+b,0)/n;
+  let sxy=0,sxx=0;tot.forEach((t,i)=>{sxy+=(i-xm)*(t-mm);sxx+=(i-xm)**2});
+  const b=sxy/sxx,a=mm-b*xm;
+  return {fech,tot,ok:true,pctMes:mm?b/mm:0,atual:a+b*n,prox:a+b*(n+1),kProx:ymMais(fech[n-1],2)};
+}
+// Clientes com compra recorrente que estão há mais de 1,5× o intervalo habitual sem comprar.
+function clientesRisco(hist,iniDados,ref){
+  const m=new Map();
+  hist.forEach(r=>{if(r.dv||r.c===ANON||r.d>ref)return;let o=m.get(r.c);if(!o){o={c:r.c,datas:new Set(),t:0};m.set(r.c,o)}o.datas.add(r.d);o.t+=r.x});
+  const meses=Math.max(dias(iniDados,ref)/30.4,1);
+  return [...m.values()].map(o=>{const ds=[...o.datas].sort();if(ds.length<3)return null;
+    const iv=(Date.parse(ds[ds.length-1])-Date.parse(ds[0]))/864e5/(ds.length-1),sem=dias(ds[ds.length-1],ref)-1;
+    return {c:o.c,iv,sem,ult:ds[ds.length-1],mensal:o.t/meses,compras:ds.length}})
+    .filter(x=>x&&x.sem>=Math.max(15,1.5*x.iv)).sort((a,b)=>b.mensal-a.mensal);
+}
+// Produtos: últimos 30 dias × 30 dias anteriores.
+function tendProdutos(hist,ref){
+  const a1=addDias(ref,-29),a0=addDias(ref,-59),b0=addDias(ref,-30),cur=new Map(),prev=new Map(),nome=new Map();
+  hist.forEach(r=>{if(r.dv)return;const k=chaveP(r);nome.set(k,r.p);
+    if(r.d>=a1&&r.d<=ref)cur.set(k,(cur.get(k)||0)+r.x);else if(r.d>=a0&&r.d<=b0)prev.set(k,(prev.get(k)||0)+r.x)});
+  const L=[...new Set([...cur.keys(),...prev.keys()])].map(k=>({k,p:nome.get(k),a:prev.get(k)||0,b:cur.get(k)||0}));
+  const tot=L.reduce((s,x)=>s+x.a+x.b,0)/2,relev=x=>Math.max(x.a,x.b)>=tot*.005;
+  return {queda:L.filter(x=>x.a>0&&relev(x)&&x.b<=x.a*.7).sort((x,y)=>(x.b-x.a)-(y.b-y.a)).slice(0,10),
+          alta:L.filter(x=>relev(x)&&x.b>=x.a*1.3).sort((x,y)=>(y.b-y.a)-(x.b-x.a)).slice(0,10)};
+}
+function renderRelatorio(){
+  const el=$('relBody');if(!el)return;
+  const HH=S?H:[...(RP||[]).filter(r=>r.d<PER.inicio),...R];
+  const ini=PER.inicio,fim=PER.fim;
+  $('relSub').textContent=`${PER.empresa} · ${dbr(ini)} a ${dbr(fim)}`;
+  if(!R.length){el.innerHTML='<div class="card empty">Sem vendas no período selecionado.</div>';return}
+  const iniDados=(S&&S.hist_inicio)||HH.reduce((m,r)=>r.d<m?r.d:m,ini);
+  const ref=(S&&S.hist_fim)||(S?S.fim:(PER.fim<hojeISO()?PER.fim:hojeISO()));
+  const A=agg(R),cliA=clientes(R);
+  const [pIni,pFim]=janelaAnterior(ini,fim),temP=pIni>=iniDados;
+  const P=temP?naJanela(HH,pIni,pFim):[],B=agg(P),cliP=clientes(P);
+  const sug=[];let h='';
+
+  /* 1. resultado */
+  const dT=A.t-B.t,efN=(A.n-B.n)*B.tk,efT=(A.tk-B.tk)*A.n;
+  let txt=`Faturamento bruto de <b>${brl(A.bruto)}</b>`+(A.dv?`, com <b>${brl(A.dv)}</b> em devoluções (${pct(A.dv/A.bruto)} do bruto)`:'')+`, resultando em <b>${brl(A.t)}</b> líquidos em <b>${num(A.n)}</b> vendas.`;
+  if(temP&&B.t)txt+=` Em relação a ${dbr(pIni)}–${dbr(pFim)}, ${dT>=0?'alta':'queda'} de <b>${brl(Math.abs(dT))}</b> (${pct(Math.abs(vr(A.t,B.t)))}), explicada principalmente pela variação ${Math.abs(efN)>=Math.abs(efT)?`no <b>número de vendas</b> (${sinal(efN)})`:`no <b>ticket médio</b> (${sinal(efT)})`}.`;
+  h+=`<div class="card"><div class="ch"><h3>1. Resultado do período</h3><span class="muted">${temP?`comparado com ${dbr(pIni)} a ${dbr(pFim)}`:'sem período anterior nos dados'}</span></div>
+    <div class="grid g4">${kc(A.dv?'Faturamento líquido':'Faturamento',brl(A.t),temP?'anterior '+brl(B.t):'',temP?vr(A.t,B.t):null)}${kc('Vendas',num(A.n),temP?'anterior '+num(B.n):'',temP?vr(A.n,B.n):null)}${kc('Ticket médio',brl(A.tk),temP?'anterior '+brl(B.tk):'',temP?vr(A.tk,B.tk):null)}${kc('Clientes ativos',num(cliA.size),temP?'anterior '+num(cliP.size):'',temP?vr(cliA.size,cliP.size):null)}</div>
+    <p class="rel-txt">${txt}</p></div>`;
+  if(temP&&B.n){
+    if(vr(A.tk,B.tk)<-.05&&vr(A.n,B.n)>-.05)sug.push(['media','Ticket médio em queda',`O ticket caiu ${pct(-vr(A.tk,B.tk))} com volume de vendas estável. Avaliar kits/combos, venda adicional no atendimento e revisar descontos concedidos.`]);
+    if(vr(A.n,B.n)<-.05)sug.push([vr(A.n,B.n)<-.15?'alta':'media','Menos vendas que no período anterior',`Foram ${num(A.n)} vendas contra ${num(B.n)} (${pct(vr(A.n,B.n))}). Priorizar reativação de clientes e prospecção.`]);
+  }
+
+  /* 2. mês a mês */
+  const ms=mesesEntre(ini,fim),linhas=[];let ultimoCmp=null;
+  ms.forEach(k=>{
+    const a0=k+'-01'<ini?ini:k+'-01',a1=ultDia(k+'-01')>fim?fim:ultDia(k+'-01'),parcial=a0!==k+'-01'||a1!==ultDia(k+'-01');
+    const rows=naJanela(HH,a0,a1),x=agg(rows);
+    const pk=ymMais(k,-1),pUlt=ultDia(pk+'-01'),p0=pk+'-'+a0.slice(8),p1=a1===ultDia(a1)?pUlt:pk+'-'+String(Math.min(+a1.slice(8),+pUlt.slice(8))).padStart(2,'0');
+    const okP=p0>=iniDados,y=okP?agg(naJanela(HH,p0,p1)):null;
+    linhas.push([lblYm(k)+(parcial?` <span class="muted">(${dm(a0)}–${dm(a1)})</span>`:''),brl(x.t),okP?vrTxt(vr(x.t,y.t)):'—',num(x.n),brl(x.tk),num(clientes(rows).size),x.dv?`<span class="dn">−${brl(x.dv)}</span>`:'—']);
+    if(okP)ultimoCmp={k,cur:rows,prev:naJanela(HH,p0,p1),parcial};
+  });
+  let dest='';
+  if(ultimoCmp){
+    const delta=(key,filtro)=>{const a=new Map(),b=new Map();ultimoCmp.cur.filter(filtro).forEach(r=>a.set(key(r),(a.get(key(r))||0)+r.x));ultimoCmp.prev.filter(filtro).forEach(r=>b.set(key(r),(b.get(key(r))||0)+r.x));
+      return [...new Set([...a.keys(),...b.keys()])].map(k=>({k,d:(a.get(k)||0)-(b.get(k)||0)})).sort((x,y)=>y.d-x.d)};
+    const fam=delta(r=>r.f,()=>true),cli=delta(r=>r.c,r=>r.c!==ANON);
+    const sobe=xs=>xs.filter(x=>x.d>0).slice(0,3).map(x=>`<b>${esc(short(x.k,36))}</b> (${sinal(x.d)})`).join(', ')||'nenhum';
+    const desce=xs=>xs.filter(x=>x.d<0).reverse().slice(0,3).map(x=>`<b>${esc(short(x.k,36))}</b> (${sinal(x.d)})`).join(', ')||'nenhum';
+    dest=`<p class="rel-txt">${nomeYm(ultimoCmp.k)[0].toUpperCase()+nomeYm(ultimoCmp.k).slice(1)} × mês anterior${ultimoCmp.parcial?' (mesmos dias)':''}: famílias que mais cresceram ${sobe(fam)}; que mais caíram ${desce(fam)}. Clientes que mais cresceram ${sobe(cli)}; que mais caíram ${desce(cli)}.</p>`;
+  }
+  h+=`<div class="card"><div class="ch"><h3>2. Análise mês a mês</h3><span class="muted">cada mês comparado com o anterior</span></div>
+    ${tbl(['Mês','Líquido','Var. mês ant.','Vendas','Ticket','Clientes','Devoluções'],linhas,[1,2,3,4,5,6])}${dest}</div>`;
+
+  /* 3. perda de vendas */
+  let perdidos=[],quedaP=[];
+  const devCli=gb(R.filter(r=>r.dv),'c').sort((a,b)=>b.dv-a.dv);
+  if(temP){
+    perdidos=gb(P.filter(r=>!r.dv&&r.c!==ANON&&!cliA.has(r.c)),'c').sort((a,b)=>b.t-a.t);
+    const cur=new Map();gb(R.filter(r=>!r.dv),chaveP).forEach(x=>cur.set(x.k,x.t));
+    const nome=new Map();[...P,...R].forEach(r=>nome.set(chaveP(r),r.p));
+    quedaP=gb(P.filter(r=>!r.dv),chaveP).map(x=>({p:nome.get(x.k),a:x.t,b:cur.get(x.k)||0})).filter(x=>x.b<x.a*.5).map(x=>({...x,perda:x.a-x.b})).sort((a,b)=>b.perda-a.perda);
+  }
+  const totPerd=perdidos.reduce((s,x)=>s+x.t,0),totQueda=quedaP.reduce((s,x)=>s+x.perda,0);
+  h+=`<div class="card"><div class="ch"><h3>3. Perda de vendas</h3><span class="muted">${temP?`período atual × ${dbr(pIni)} a ${dbr(pFim)}`:'sem período anterior para comparar'}</span></div>
+    <div class="grid g4">${kc('Clientes que não voltaram',num(perdidos.length),temP?brl(totPerd)+' no período anterior':'—')}${kc('Produtos em queda',num(quedaP.length),temP?brl(totQueda)+' a menos':'—')}${kc('Devoluções',A.dv?brl(A.dv):'—',A.dv?`${num(devCli.length)} clientes · ${pct(A.dv/A.bruto)} do bruto`:'nenhuma no período')}</div>
+    ${temP?`<div class="rel-h4">Clientes que compraram antes e não no período</div>${tbl(['Cliente','Comprou antes','Vendas'],perdidos.slice(0,12).map(x=>[esc(x.k),brl(x.t),num(x.n)]),[1,2])}
+    <div class="rel-h4">Produtos que zeraram ou caíram mais da metade</div>${tbl(['Produto','Antes','Agora','Perda'],quedaP.slice(0,12).map(x=>[esc(x.p),brl(x.a),brl(x.b),`<span class="dn">−${brl(x.perda)}</span>`]),[1,2,3])}`:''}
+    ${A.dv?`<div class="rel-h4">Devoluções por cliente</div>${tbl(['Cliente','Devolvido','Comprou no período'],devCli.slice(0,8).map(x=>[esc(x.k),`<span class="dn">−${brl(x.dv)}</span>`,brl(x.t+x.dv)]),[1,2])}`:''}</div>`;
+  if(perdidos.length)sug.push([totPerd>A.t*.05?'alta':'media','Recuperar clientes que não voltaram',`${num(perdidos.length)} clientes compraram ${brl(totPerd)} no período anterior e nada neste. Começar por ${lista(perdidos.map(x=>x.k))}.`]);
+  if(quedaP.length)sug.push(['media','Produtos com venda em queda',`${num(quedaP.length)} produtos venderam ${brl(totQueda)} a menos. Conferir preço, disponibilidade e concorrência de ${lista(quedaP.map(x=>x.p))}.`]);
+  if(A.dv&&A.dv/A.bruto>.02)sug.push([A.dv/A.bruto>.05?'alta':'media','Devoluções acima do normal',`${pct(A.dv/A.bruto)} do faturamento bruto foi devolvido. Investigar causas com ${lista(devCli.map(x=>x.k))}.`]);
+
+  /* 4. produtos parados */
+  let parado=[];
+  if(EST){
+    const vc=new Set(R.map(r=>r.cod).filter(Boolean)),vn=new Set(R.map(r=>r.p));
+    const ultV=new Map();HH.forEach(r=>{if(r.dv)return;const k=r.cod||r.p;if(!ultV.has(k)||r.d>ultV.get(k))ultV.set(k,r.d)});
+    parado=EST.filter(e=>!vc.has(e.cod)&&!vn.has(e.p)).map(e=>({...e,ult:ultV.get(e.cod)||ultV.get(e.p)||''})).sort((a,b)=>b.custo-a.custo);
+  }
+  const totParado=parado.reduce((s,x)=>s+x.custo,0),mediaMes=A.t*30.4/Math.max(dias(ini,fim),1);
+  h+=`<div class="card"><div class="ch"><h3>4. Produtos parados no estoque</h3><span class="muted">saldo atual sem venda no período</span></div>
+    ${EST?`<div class="grid g4">${kc('Custo parado',brl(totParado),`${num(parado.length)} produtos`)}${kc('A preço de venda',brl(parado.reduce((s,x)=>s+x.q*x.preco,0)),'potencial se vendidos')}${kc('Peso no faturamento',mediaMes?pct(totParado/mediaMes):'—','custo parado ÷ faturamento médio mensal')}</div>
+    ${tbl(['Produto','Família','Saldo','Custo parado','Última venda'],parado.slice(0,15).map(x=>[esc(x.p),esc(x.f),num(x.q),brl(x.custo),x.ult?dbr(x.ult):'sem venda nos dados']),[2,3])}`
+    :'<p class="rel-txt">O estoque é a posição de hoje: ele aparece quando o período termina no último dia com dados.</p>'}</div>`;
+  if(parado.length)sug.push([totParado>mediaMes*.2?'alta':'media','Girar estoque parado',`${brl(totParado)} a custo em ${num(parado.length)} produtos sem venda no período. Avaliar promoção, kit ou devolução ao fornecedor para ${lista(parado.map(x=>x.p))}.`]);
+
+  /* 5. análise preditiva */
+  const proj=projecaoMes(HH,iniDados,ref),tend=tendenciaMeses(HH,iniDados,ref);
+  const risco=clientesRisco(HH,iniDados,ref),tp=dias(iniDados,ref)>=60?tendProdutos(HH,ref):null;
+  const kPrev=ymMais(ym(ref),-1),totPrevMes=kPrev+'-01'>=iniDados?agg(HH.filter(r=>ym(r.d)===kPrev)).t:0;
+  let ptxt='';
+  if(proj){
+    ptxt+=`Projeção de fechamento de <b>${nomeYm(proj.k)}</b>: <b>${brl(proj.proj)}</b> (faixa provável ${brl(proj.min)} a ${brl(proj.max)}), considerando o realizado até ${dbr(ref)} (${brl(proj.real)}) e o ritmo de cada dia da semana nas últimas 8 semanas.`;
+    if(totPrevMes)ptxt+=` Contra ${nomeYm(kPrev)} (${brl(totPrevMes)}), variação esperada de <b>${pct(vr(proj.proj,totPrevMes))}</b>.`;
+    if(totPrevMes&&proj.proj<totPrevMes*.95&&proj.diasUteis){
+      const precisa=(totPrevMes-proj.real)/proj.diasUteis;
+      sug.unshift(['alta',`Mês projetado abaixo de ${nomeYm(kPrev)}`,`Para igualar ${nomeYm(kPrev)} é preciso vender em média <b>${brl(precisa)}</b> por dia útil nos ${num(proj.diasUteis)} dias restantes; o ritmo atual é ${brl(proj.mediaUtil)}. Concentrar esforço em clientes recorrentes e itens de maior giro.`]);
+    }else if(totPrevMes&&proj.proj>totPrevMes*1.05)sug.push(['baixa','Mês projetado acima do anterior',`Manter o ritmo e garantir estoque dos itens de maior saída para não perder vendas no fim do mês.`]);
+  }else ptxt+=`Sem mês em andamento para projetar (último dia com dados: ${dbr(ref)}).`;
+  if(tend.ok)ptxt+=` Nos meses fechados (${tend.fech.map(lblYm).join(', ')}) a tendência é de <b>${tend.pctMes>=0?'+':'−'}${pct(Math.abs(tend.pctMes))} ao mês</b>; mantida, ${nomeYm(tend.kProx)} ficaria em torno de <b>${brl(Math.max(tend.prox,0))}</b> (estimativa indicativa).`;
+  else ptxt+=` A tendência mensal precisa de pelo menos 3 meses fechados (há ${num(tend.fech.length)}).`;
+  const totRisco=risco.reduce((s,x)=>s+x.mensal,0);
+  if(risco.length)sug.push([totRisco>(totPrevMes||mediaMes)*.05?'alta':'media','Clientes em risco de parar',`${num(risco.length)} clientes recorrentes estão sem comprar há mais tempo que o habitual (${brl(totRisco)}/mês em média). Contatar primeiro ${lista(risco.map(x=>x.c))}.`]);
+  if(tp&&tp.alta.length){
+    const semSaldo=EST?tp.alta.filter(x=>!EST.some(e=>e.cod===x.k||e.p===x.p)):[];
+    if(semSaldo.length)sug.unshift(['alta','Repor produtos em alta sem estoque',`${lista(semSaldo.map(x=>x.p))} estão vendendo mais nos últimos 30 dias e não têm saldo em estoque.`]);
+    else sug.push(['baixa','Aproveitar produtos em alta',`${lista(tp.alta.map(x=>x.p))} cresceram nos últimos 30 dias. Garantir estoque e destacar na venda.`]);
+  }
+  const top5=[...gb(R.filter(r=>r.c!==ANON&&!r.dv),'c')].sort((a,b)=>b.t-a.t).slice(0,5).reduce((s,x)=>s+x.t,0);
+  if(A.t&&top5/A.t>.5)sug.push(['media','Concentração em poucos clientes',`Os 5 maiores clientes somam ${pct(top5/A.t)} do faturamento. Ampliar a carteira reduz o risco de uma perda grande.`]);
+  h+=`<div class="card"><div class="ch"><h3>5. Análise preditiva</h3><span class="muted">com base nos dados de ${dbr(iniDados)} a ${dbr(ref)}</span></div>
+    <div class="chart"><canvas id="cRel" aria-label="Faturamento mensal com projeção" role="img"></canvas></div>
+    <p class="rel-txt">${ptxt}</p>
+    <div class="rel-h4">Clientes em risco de parar de comprar</div>
+    ${tbl(['Cliente','Compra a cada','Sem comprar há','Última compra','Média mensal'],risco.slice(0,10).map(x=>[esc(x.c),num(Math.round(x.iv))+' dias',`<span class="dn">${num(x.sem)} dias</span>`,dbr(x.ult),brl(x.mensal)]),[1,2,4])}
+    ${tp?`<div class="rel-h4">Produtos em tendência de queda (30 dias × 30 anteriores)</div>${tbl(['Produto','30 dias anteriores','Últimos 30 dias','Var.'],tp.queda.map(x=>[esc(x.p),brl(x.a),brl(x.b),vrTxt(vr(x.b,x.a))]),[1,2,3])}
+    <div class="rel-h4">Produtos em alta</div>${tbl(['Produto','30 dias anteriores','Últimos 30 dias','Var.'],tp.alta.map(x=>[esc(x.p),brl(x.a),brl(x.b),x.a?vrTxt(vr(x.b,x.a)):'novo']),[1,2,3])}`:''}
+    <p class="rel-nota">Estimativas estatísticas simples (ritmo por dia da semana e tendência linear). Com histórico desde ${dbr(iniDados)} não é possível medir sazonalidade anual; use como referência, não como meta.</p></div>`;
+
+  /* 6. sugestões */
+  const ordem={alta:0,media:1,baixa:2},rot={alta:'Alta',media:'Média',baixa:'Baixa'};
+  sug.sort((a,b)=>ordem[a[0]]-ordem[b[0]]);
+  h+=`<div class="card"><div class="ch"><h3>6. Sugestões de melhoria</h3><span class="muted">geradas a partir dos números acima</span></div>
+    ${sug.length?`<ol class="sug">${sug.map(([p,t,d])=>`<li><span class="prio ${p}">${rot[p]}</span><div><b>${t}.</b> ${d}</div></li>`).join('')}</ol>`:'<p class="rel-txt">Nenhum ponto de atenção relevante no período.</p>'}</div>`;
+  el.innerHTML=h;
+
+  const meses=mesesEntre(iniDados,ref),real=meses.map(k=>agg(HH.filter(r=>ym(r.d)===k)).t),c=cols();
+  const labels=meses.map(lblYm),extra=meses.map(()=>0),estim=meses.map(()=>null);
+  if(proj)extra[meses.length-1]=Math.max(proj.proj-proj.real,0);
+  if(tend.ok&&tend.kProx>meses[meses.length-1]){labels.push(lblYm(tend.kProx));real.push(0);extra.push(0);estim.push(Math.max(tend.prox,0))}
+  mk('cRel',{type:'bar',data:{labels,datasets:[
+      {label:'Realizado',data:real,backgroundColor:c[0],borderRadius:4,stack:'s'},
+      {label:'Projeção do mês',data:extra,backgroundColor:c[0]+'55',borderRadius:4,stack:'s'},
+      {label:'Tendência',data:estim,backgroundColor:c[1]+'88',borderRadius:4,stack:'s'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'rectRounded',boxWidth:10,padding:16}},tooltip:{filter:x=>x.parsed.y>0,callbacks:{label:x=>` ${x.dataset.label}: ${brl(x.parsed.y)}`}}},
+      scales:{x:{...axes(false).x,stacked:true},y:{...axes(false).y,stacked:true}}}});
+}
+$('relPrint').onclick=()=>{document.body.classList.add('so-rel');window.print()};
+window.addEventListener('afterprint',()=>document.body.classList.remove('so-rel'));
 
 /* ---------- tema, navegação, carga ---------- */
 const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
@@ -621,11 +856,13 @@ const navLinks=[...document.querySelectorAll('#nav a')];
 const spy=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)navLinks.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id))}),{rootMargin:'-40% 0px -55% 0px'});
 document.querySelectorAll('.main section').forEach(s=>spy.observe(s));
 
-function render(){if(!window.Chart)return;base();renderKPIs();renderEvo();renderRank();renderChannels();renderTables();renderOport()}
+function render(){if(!window.Chart)return;base();renderKPIs();renderEvo();renderRank();renderChannels();renderTables();renderOport();renderRelatorio()}
 let refreshTimer=null;
 function loadStatic(){
   // Sem PDV na matriz: ignora linhas de cupom se ainda existirem em snapshot antigo
   R=temPdv()?S.rows:S.rows.filter(r=>r.ch!=='PDV');
+  H=S.hist||[...(S.prev||[]).filter(r=>r.d<S.inicio),...S.rows];
+  if(!temPdv())H=H.filter(r=>r.ch!=='PDV');
   Object.assign(PER,{inicio:S.inicio,fim:S.fim,fonte:S.fonte,empresa:S.empresa||PER.empresa,meses:mesesNoPeriodo(S.inicio,S.fim)});
   if(!temPdv()&&st.ch==='PDV')st.ch='all';
   $('empresa').textContent=PER.empresa;document.title=`Relatório de vendas · ${PER.empresa} · ${S.titulo}`;

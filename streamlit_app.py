@@ -14,7 +14,7 @@ import hmac
 import json
 import os
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -166,7 +166,7 @@ if FONTE == "sample":
                "PAINEL_DATA_KEY em Settings > Secrets do app.")
 
 hoje = date.today()
-c0, c1, c2, c3, c4 = st.columns([1.6, 3, 1.2, 1.6, 3.4])
+c0, c1, c1b, c1c, c2, c3, c4 = st.columns([1.4, 1.1, 1.1, 2.4, 1.1, 1.4, 2.4])
 empresa = "Filial"
 if FONTE == "snapshot":
     with c0:
@@ -192,12 +192,68 @@ else:
     lim_ini, lim_fim = date(2026, 7, 1), date(2026, 9, 30)
     padrao = (lim_ini, lim_fim)
 
+# Período digitado (DD/MM/AAAA); o calendário de intervalo do Streamlit recarrega a página no meio da seleção.
+ATALHOS = ("Mês atual", "Mês anterior", "Trimestre")
+
+
+def _br(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def _ler_data(txt: str) -> date | None:
+    try:
+        return datetime.strptime((txt or "").strip(), "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
+
+def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
+    tipo = st.session_state.get("atalho")
+    fim_a = lim_fim
+    if tipo == "Mês atual":
+        ini_a = fim_a.replace(day=1)
+    elif tipo == "Mês anterior":
+        fim_a = fim_a.replace(day=1) - timedelta(days=1)
+        ini_a = fim_a.replace(day=1)
+    elif tipo == "Trimestre":
+        ini_a = date(fim_a.year, 3 * ((fim_a.month - 1) // 3) + 1, 1)
+    else:
+        return
+    if lim_ini:
+        ini_a, fim_a = max(ini_a, lim_ini), max(fim_a, lim_ini)
+    st.session_state.update(de=_br(ini_a), ate=_br(fim_a), atalho=None)
+
+
+# Troca de empresa muda os limites; reinicia o período no padrão dela.
+if st.session_state.get("per_empresa") != empresa or "de" not in st.session_state:
+    st.session_state.update(de=_br(padrao[0]), ate=_br(padrao[1]), per_empresa=empresa)
 with c1:
-    per = st.date_input("Período", value=padrao, min_value=lim_ini, max_value=lim_fim, format="DD/MM/YYYY")
-if not isinstance(per, (list, tuple)) or len(per) != 2:
-    st.info("Selecione a data inicial e a final.")
+    st.text_input("De", key="de", placeholder="DD/MM/AAAA", max_chars=10)
+with c1b:
+    st.text_input("Até", key="ate", placeholder="DD/MM/AAAA", max_chars=10)
+with c1c:
+    st.segmented_control("Atalhos", ATALHOS, key="atalho", on_change=_aplicar_atalho, args=(lim_ini, lim_fim))
+
+d_ini, d_fim = _ler_data(st.session_state["de"]), _ler_data(st.session_state["ate"])
+if not d_ini or not d_fim:
+    st.warning("Data inválida. Digite no formato DD/MM/AAAA, por exemplo 01/10/2026.")
     st.stop()
-inicio, fim = per[0].isoformat(), per[1].isoformat()
+if d_ini > d_fim:
+    st.warning("A data inicial (De) é maior que a final (Até).")
+    st.stop()
+ajuste = []
+if lim_ini and d_ini < lim_ini:
+    d_ini = lim_ini
+    ajuste.append(f"início ajustado para {_br(lim_ini)}, primeiro dia com dados")
+if d_fim > lim_fim:
+    d_fim = lim_fim
+    ajuste.append(f"fim ajustado para {_br(lim_fim)}, último dia com dados")
+if d_ini > d_fim:
+    st.warning(f"Não há dados nesse período. Os dados vão de {_br(lim_ini) if lim_ini else '—'} a {_br(lim_fim)}.")
+    st.stop()
+if ajuste:
+    st.caption("Período " + "; ".join(ajuste) + ".")
+inicio, fim = d_ini.isoformat(), d_fim.isoformat()
 with c2:
     if st.button("Atualizar dados", use_container_width=True):
         for f in (snapshot, vendas, estoque):
@@ -210,6 +266,7 @@ if snap is not None:
     rows_prev = [r for r in snap["rows"] if p_ini <= r["d"] <= p_fim] if p_ini >= snap["inicio"] else []
     est = snap.get("estoque") if fim == snap["fim"] else None
     atualizado, fonte_painel, fonte_txt = snap["gerado_em"], "omie", "Omie (atualização automática)"
+    hist, hist_ini, hist_fim = snap["rows"], snap["inicio"], snap["fim"]
 else:
     try:
         with st.spinner("Consultando a Omie (a primeira carga pode levar alguns minutos)…"):
@@ -225,16 +282,20 @@ else:
     atualizado = time.strftime("%d/%m/%Y %H:%M", time.localtime(ts))
     fonte_painel = FONTE
     fonte_txt = "Omie" if FONTE == "omie" else "dados fictícios de demonstração"
+    hist, hist_ini, hist_fim = rows_prev + rows, (p_ini if rows_prev else inicio), fim
 
 # PDV/NFC-e só na Filial; o flag vai no HTML para o filtro/gráfico sumirem na Matriz.
 tem_pdv = empresa == "Filial"
 if tem_pdv is False:
     rows = [r for r in rows if r.get("ch") != "PDV"]
     rows_prev = [r for r in rows_prev if r.get("ch") != "PDV"]
+    hist = [r for r in hist if r.get("ch") != "PDV"]
+# Histórico completo vai junto para a seção Relatório (comparativos e previsão).
+extra = {"tem_pdv": tem_pdv, "hist": hist, "hist_inicio": hist_ini, "hist_fim": hist_fim}
 html_app = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
-                              modo="app", tem_pdv=tem_pdv)
+                              modo="app", **extra)
 html_rel = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
-                              tem_pdv=tem_pdv)
+                              **extra)
 with c3:
     st.download_button("Baixar relatório (HTML)", html_rel, use_container_width=True,
                        file_name=f"Relatorio_Vendas_{EMPRESA.replace(' ', '_')}_{inicio}_a_{fim}.html", mime="text/html")
