@@ -45,6 +45,8 @@ assert not at.exception, at.exception
 print("setembro digitado:", [c.value for c in at.caption][-1:])
 at.text_input(key="de").input("31/02/2026").run()
 print("data inválida avisa:", any("Data inválida" in w.value for w in at.warning))
+at.text_input(key="de").input("01092026").run()
+print("só dígitos vira:", at.text_input(key="de").value, "| exceções:", len(at.exception))
 for atalho in ("Mês anterior", "Trimestre", "Mês atual"):
     at.text_input(key="de").input("01/10/2026").run()
     at.button_group(key="atalho").set_value(atalho).run() if hasattr(at, "button_group") else None

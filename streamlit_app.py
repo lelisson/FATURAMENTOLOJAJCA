@@ -200,11 +200,50 @@ def _br(d: date) -> str:
     return d.strftime("%d/%m/%Y")
 
 
+def _formatar_data(txt: str) -> str:
+    dig = "".join(c for c in (txt or "") if c.isdigit())
+    return f"{dig[:2]}/{dig[2:4]}/{dig[4:8]}" if len(dig) == 8 else (txt or "").strip()
+
+
 def _ler_data(txt: str) -> date | None:
     try:
-        return datetime.strptime((txt or "").strip(), "%d/%m/%Y").date()
+        return datetime.strptime(_formatar_data(txt), "%d/%m/%Y").date()
     except ValueError:
         return None
+
+
+def _normalizar(chave: str) -> None:
+    st.session_state[chave] = _formatar_data(st.session_state.get(chave, ""))
+
+
+# Máscara DD/MM/AAAA nos campos De/Até: as barras entram sozinhas enquanto o usuário digita.
+MASCARA_DATA = """<script>
+(function(){
+  const P = window.parent, doc = P.document;
+  const codigo = `(function(){
+    if (window.__mascaraData) return; window.__mascaraData = true;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const fmt = v => { const d = v.replace(/\\\\D/g, '').slice(0, 8);
+      return d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4) : ''); };
+    const ligar = el => {
+      if (el.dataset.mascara) return; el.dataset.mascara = '1';
+      el.setAttribute('inputmode', 'numeric');
+      el.addEventListener('input', () => {
+        const novo = fmt(el.value);
+        if (novo === el.value) return;
+        setter.call(el, novo);
+        el.setSelectionRange(novo.length, novo.length);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    const varrer = () => document.querySelectorAll('input[aria-label="De"], input[aria-label="Até"]').forEach(ligar);
+    varrer(); new MutationObserver(varrer).observe(document.body, { childList: true, subtree: true });
+  })();`;
+  if (P.__mascaraData) return;
+  const s = doc.createElement('script'); s.textContent = codigo; doc.head.appendChild(s);
+  if (!P.__mascaraData) P.eval(codigo);
+})();
+</script>"""
 
 
 def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
@@ -228,9 +267,10 @@ def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
 if st.session_state.get("per_empresa") != empresa or "de" not in st.session_state:
     st.session_state.update(de=_br(padrao[0]), ate=_br(padrao[1]), per_empresa=empresa)
 with c1:
-    st.text_input("De", key="de", placeholder="DD/MM/AAAA", max_chars=10)
+    st.text_input("De", key="de", placeholder="DD/MM/AAAA", max_chars=10, on_change=_normalizar, args=("de",))
 with c1b:
-    st.text_input("Até", key="ate", placeholder="DD/MM/AAAA", max_chars=10)
+    st.text_input("Até", key="ate", placeholder="DD/MM/AAAA", max_chars=10, on_change=_normalizar, args=("ate",))
+components.html(MASCARA_DATA, height=0)
 with c1c:
     st.segmented_control("Atalhos", ATALHOS, key="atalho", on_change=_aplicar_atalho, args=(lim_ini, lim_fim))
 
