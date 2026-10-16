@@ -996,14 +996,13 @@ function loadStatic(){
   if(PER.meses.length===1){$('fm').hidden=true;st.evo='d';[...$('evoTog').children].forEach(x=>{x.setAttribute('aria-pressed',x.dataset.v==='d');x.hidden=x.dataset.v==='m'});
     document.querySelector('#tMes').closest('.card').querySelector('h3').textContent='Comparativo com o mês anterior';
     document.querySelector('#cCan').closest('.card').querySelector('h3').textContent='Faturamento por canal · mês anterior × atual'}
-  // Oportunidades: trimestre atual × anterior (como no painel local) quando os dados cobrem os dois
-  const diaAntes=s=>new Date(Date.parse(s)-864e5).toISOString().slice(0,10);
+  // Oportunidades: período selecionado × período anterior equivalente (mesma regra do relatório), no histórico completo
   const pool=H.length?H:[...S.prev,...R];
-  const desde=S.hist_inicio||(temPrev()&&S.prev_fim>=diaAntes(S.inicio)?S.prev_inicio:S.inicio);
-  const iniQ=inicioTrimestre(S.fim),fimPQ=diaAntes(iniQ),iniPQ=inicioTrimestre(fimPQ);
-  if(desde<=iniPQ){CUR={inicio:iniQ,fim:S.fim,rows:pool.filter(r=>r.d>=iniQ&&r.d<=S.fim)};PREV={inicio:iniPQ,fim:fimPQ};RP=pool.filter(r=>r.d>=iniPQ&&r.d<=fimPQ);LBL=LBL_TRI}
-  else if(temPrev()){CUR={inicio:S.inicio,fim:S.fim,rows:R};PREV={inicio:S.prev_inicio,fim:S.prev_fim};RP=S.prev}
-  else{CUR={inicio:S.inicio,fim:S.fim,rows:R};PREV=null;RP=null}
+  const desde=S.hist_inicio||(temPrev()?S.prev_inicio:S.inicio);
+  const [pIni,pFim]=janelaAnterior(S.inicio,S.fim);
+  CUR={inicio:S.inicio,fim:S.fim,rows:R};
+  if(pIni>=desde){PREV={inicio:pIni,fim:pFim};RP=pool.filter(r=>r.d>=pIni&&r.d<=pFim)}
+  else{PREV=null;RP=null}
   EST=S.estoque||null;
   const semOport=S.fonte!=='omie';$('oport').hidden=semOport;$('navOport').hidden=semOport;
   if(!EST)document.querySelector('[data-pane="pParado"]').hidden=true;
