@@ -216,7 +216,8 @@ def _normalizar(chave: str) -> None:
     st.session_state[chave] = _formatar_data(st.session_state.get(chave, ""))
 
 
-# Máscara DD/MM/AAAA nos campos De/Até: as barras entram sozinhas enquanto o usuário digita.
+# Máscara DD/MM/AAAA nos campos De/Até e painel na altura da janela (menu e cabeçalho do painel ficam fixos;
+# só o conteúdo rola dentro dele, sem a página do Streamlit rolar junto).
 MASCARA_DATA = """<script>
 (function(){
   const P = window.parent, doc = P.document;
@@ -238,6 +239,14 @@ MASCARA_DATA = """<script>
     };
     const varrer = () => document.querySelectorAll('input[aria-label="De"], input[aria-label="Até"]').forEach(ligar);
     varrer(); new MutationObserver(varrer).observe(document.body, { childList: true, subtree: true });
+    const ajustarPainel = () => {
+      const fs = [...document.querySelectorAll('iframe')].filter(f => f.offsetHeight > 300);
+      if (!fs.length) return;
+      const f = fs.reduce((a, b) => a.offsetHeight >= b.offsetHeight ? a : b);
+      const h = Math.max(560, Math.floor(window.innerHeight - f.getBoundingClientRect().top - window.scrollY - 10));
+      if (Math.abs(f.offsetHeight - h) > 2) { f.style.height = h + 'px'; f.setAttribute('height', h); }
+    };
+    window.addEventListener('resize', ajustarPainel); setInterval(ajustarPainel, 800); ajustarPainel();
   })();`;
   if (P.__mascaraData) return;
   const s = doc.createElement('script'); s.textContent = codigo; doc.head.appendChild(s);
