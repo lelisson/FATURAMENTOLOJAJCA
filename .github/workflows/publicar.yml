@@ -87,6 +87,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # visita o painel no Streamlit (evita suspensão) uma vez a cada 2 h: hora par, primeiros 20 min
+          if [ $(( $(date -d "@$INICIO" +%-H) % 2 )) -eq 0 ] && [ "$(date -d "@$INICIO" +%-M)" -lt 20 ]; then
+            gh workflow run manter-ativo.yml --repo "$GITHUB_REPOSITORY" --ref main || true
+          fi
           espera=$(( INICIO + 1200 - $(date +%s) ))
           if [ "$espera" -gt 0 ]; then sleep "$espera"; fi
           gh workflow run publicar.yml --repo "$GITHUB_REPOSITORY" --ref main

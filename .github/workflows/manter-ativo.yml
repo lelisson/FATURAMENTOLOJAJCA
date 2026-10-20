@@ -1,0 +1,33 @@
+name: Manter painel ativo
+
+on:
+  # Reserva; o disparo principal vem do workflow de publicação a cada ~2 h (o agendamento do GitHub atrasa).
+  schedule:
+    - cron: "41 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manter-ativo
+  cancel-in-progress: true
+
+jobs:
+  visitar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+
+      - run: python scripts/manter_ativo.py
+        env:
+          STREAMLIT_APP_URL: ${{ secrets.STREAMLIT_APP_URL }}
