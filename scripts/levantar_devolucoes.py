@@ -1,7 +1,7 @@
 """Levantamento (somente leitura) de devoluções e transferências nas NF-e da Omie.
 
-Uso: python scripts/levantar_devolucoes.py 2026-07-01 2026-10-14 [--matriz]
-Grava a amostra bruta em backend/data/raw_devolucoes[_matriz].json (fora do git).
+Uso: python scripts/levantar_devolucoes.py 2026-07-01 2026-10-14
+Grava a amostra bruta em backend/data/raw_devolucoes.json (fora do git).
 """
 import json
 import sys
@@ -26,10 +26,6 @@ def listar(inicio, fim, tp):
 
 def main():
     inicio, fim = sys.argv[1], sys.argv[2]
-    matriz = "--matriz" in sys.argv
-    if matriz:
-        omie.carregar_chaves_matriz_local()
-        omie.usar_empresa("matriz")
     amostra = {}
     for tp, nome in (("0", "ENTRADA"), ("1", "SAIDA")):
         nfs = listar(inicio, fim, tp)
@@ -55,7 +51,7 @@ def main():
             print(f"  {cfop:>5} | {fin:>4} | {op:>4} | {len(g['nfs']):>4} | {g['valor']:>12,.2f}")
     cupons = omie.listar_cupons_bruto(inicio, fim)
     print(f"\nCupons fiscais (PDV): {len(cupons)}")
-    destino = ROOT / f"backend/data/raw_devolucoes{'_matriz' if matriz else ''}.json"
+    destino = ROOT / "backend/data/raw_devolucoes.json"
     destino.write_text(json.dumps(amostra, ensure_ascii=False, indent=1), encoding="utf-8")
 
 

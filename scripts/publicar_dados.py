@@ -67,7 +67,6 @@ def git(*args: str) -> subprocess.CompletedProcess:
 # empresa → (arquivo no branch `dados`, variável com o nome exibido, nome padrão)
 EMPRESAS = {
     "filial": ("painel.enc", "OMIE_EMPRESA", "JCA Filial"),
-    "matriz": ("painel_matriz.enc", "OMIE_EMPRESA_MATRIZ", "JCA Matriz"),
 }
 
 
@@ -82,6 +81,9 @@ def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
     # Parte do que já está publicado: a empresa que falhar nesta execução mantém o arquivo anterior.
     if git("fetch", "-q", "--depth", "1", "origin", "dados").returncode == 0:
         git("reset", "-q", "--hard", "FETCH_HEAD")
+    for antigo in PASTA.glob("*.enc"):
+        if antigo.name not in blobs:
+            antigo.unlink()
     for arquivo, blob in blobs.items():
         (PASTA / arquivo).write_bytes(blob)
     (PASTA / "README.md").write_text("Dados do painel, criptografados e atualizados automaticamente. Não editar.\n",
@@ -170,7 +172,7 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
     dados = {
         "gerado_em": time.strftime("%d/%m/%Y %H:%M"), "empresa": os.getenv(var_nome, nome_padrao),
         "inicio": ini.isoformat(), "fim": hoje.isoformat(), "inicio_padrao": ini_padrao.isoformat(),
-        "rows": rows, "estoque": est, "tem_pdv": empresa == "filial",
+        "rows": rows, "estoque": est, "tem_pdv": True,
     }
     bruto = json.dumps(dados, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     blob = fernet.encrypt(gzip.compress(bruto))
@@ -185,8 +187,6 @@ def main() -> int:
     if not chave:
         log("PAINEL_DATA_KEY ausente")
         return 1
-    if not NO_ACTIONS:
-        omie.carregar_chaves_matriz_local()
     fernet = Fernet(chave.encode())
     hoje = date.today()
     blobs = {}

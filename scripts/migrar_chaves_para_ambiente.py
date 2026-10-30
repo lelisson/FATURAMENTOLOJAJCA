@@ -1,7 +1,6 @@
 """Move as chaves dos arquivos .env para variáveis de ambiente do usuário do Windows (HKCU\\Environment).
 
 - .env do painel (filial): OMIE_APP_KEY/SECRET → OMIE_FILIAL_APP_KEY/SECRET; PAINEL_DATA_KEY → PAINEL_DATA_KEY
-- .env do projeto de estoque (matriz, pasta acima): OMIE_APP_KEY/SECRET → OMIE_APP_KEY/SECRET
 
 Só remove as linhas dos .env depois de conferir que o valor gravado é idêntico. Nunca imprime valores.
 Uso: python scripts/migrar_chaves_para_ambiente.py
@@ -15,14 +14,11 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PAINEL = ROOT / ".env"
-ENV_MATRIZ = ROOT.parents[1] / ".env"
 
 PLANO = [  # (arquivo, nome no .env, variável do usuário)
     (ENV_PAINEL, "OMIE_APP_KEY", "OMIE_FILIAL_APP_KEY"),
     (ENV_PAINEL, "OMIE_APP_SECRET", "OMIE_FILIAL_APP_SECRET"),
     (ENV_PAINEL, "PAINEL_DATA_KEY", "PAINEL_DATA_KEY"),
-    (ENV_MATRIZ, "OMIE_APP_KEY", "OMIE_APP_KEY"),
-    (ENV_MATRIZ, "OMIE_APP_SECRET", "OMIE_APP_SECRET"),
 ]
 
 
@@ -49,7 +45,7 @@ def remover_linhas(arquivo: Path, nomes: set[str]) -> None:
 
 
 def main() -> int:
-    valores = {arq: dotenv_values(arq) if arq.exists() else {} for arq in {ENV_PAINEL, ENV_MATRIZ}}
+    valores = {arq: dotenv_values(arq) if arq.exists() else {} for arq in {ENV_PAINEL}}
     remover: dict[Path, set[str]] = {}
     erros = 0
     for arq, nome_env, var in PLANO:

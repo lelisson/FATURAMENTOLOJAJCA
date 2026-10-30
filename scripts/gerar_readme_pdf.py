@@ -67,7 +67,7 @@ def main() -> None:
         [Paragraph("JCA · Painel de Vendas", st["CoverTitle"])],
         [Paragraph("Relatório do projeto (README técnico e de segurança)", st["CoverSub"])],
         [Paragraph(
-            "Filial e Matriz · Omie (somente leitura) · Streamlit Cloud · GitHub Actions<br/>"
+            "JCA Filial · Omie (somente leitura) · Streamlit Cloud · GitHub Actions<br/>"
             "Data: 15/10/2026 · Repositório: github.com/lelisson/FATURAMENTOLOJAJCA",
             st["CoverMeta"],
         )],
@@ -96,11 +96,11 @@ def main() -> None:
     story.append(Paragraph("2.1 Escopo do produto", st["H2"]))
     bullets(story, st, [
         "Painel interativo de vendas (KPIs, canais, ranking, detalhamento, oportunidades).",
-        "Seletor <b>Filial</b> / <b>Matriz</b> no mesmo Streamlit, período a partir de julho/2026.",
+        "Somente a JCA Filial, período a partir de julho/2026. A Matriz tem repositório próprio "
+        "(FATURAMENTOMATRIZJCA), com chave de cifra e senha separadas.",
         "Faturamento líquido: vendas menos devoluções no mês da devolução; transferências e "
         "operações excluídas fora do total.",
         "Card e aba de <b>Devoluções</b>; clientes sem compra e estoque sem giro (oportunidades).",
-        "Matriz sem PDV (não consulta CuponsFiscais / NFC-e); na interface o canal PDV fica oculto.",
         "Relatórios HTML geráveis no painel; este PDF documenta o projeto para diretoria e segurança.",
     ])
 
@@ -108,10 +108,9 @@ def main() -> None:
     bullets(story, st, [
         "<b>Coleta:</b> GitHub Actions executa scripts/publicar_dados.py "
         "a cada 20 min (cada execução agenda a próxima; cron nos minutos 7, 27 e 47 como reserva).",
-        "<b>Fonte:</b> Omie API — ListarNF (saídas e entradas), CuponsFiscais (só filial), "
+        "<b>Fonte:</b> Omie API — ListarNF (saídas e entradas), CuponsFiscais (PDV), "
         "ConsultarPedido (canal consumidor final), ListarPosEstoque.",
-        "<b>Publicação:</b> JSON compactado (gzip) + cifrado Fernet → painel.enc e "
-        "painel_matriz.enc no branch dados.",
+        "<b>Publicação:</b> JSON compactado (gzip) + cifrado Fernet → painel.enc no branch dados.",
         "<b>Visualização:</b> Streamlit Cloud carrega o snapshot, valida senha (hash) e embute "
         "os dados no frontend estático.",
         "<b>Local (opcional):</b> FastAPI + frontend no PC; chaves só em variáveis de ambiente "
@@ -159,7 +158,7 @@ def main() -> None:
          "Streamlit Cloud não possui OMIE_APP_KEY. Só recebe URL do snapshot + chave Fernet + "
          "hash de senha. Quem vê o painel não consulta a Omie."),
         ("4 · Dados em trânsito/repouso", "Criptografia Fernet",
-         "Branch público dados contém só blobs cifrados (painel.enc / painel_matriz.enc). "
+         "Branch público dados contém só o blob cifrado painel.enc. "
          "Sem a PAINEL_DATA_KEY o conteúdo é ilegível."),
         ("5 · Acesso ao app", "Senha com hash",
          "APP_PASSWORD_HASH (PBKDF2-SHA256, 600 mil iterações). Senha em texto nunca fica no HTML "
@@ -207,7 +206,7 @@ def main() -> None:
 
     story.append(Paragraph("4. O que NÃO sobe / NÃO fica exposto", st["H1"]))
     bullets(story, st, [
-        "App Key e App Secret da Omie (filial e matriz) no código, no HTML ou no Streamlit.",
+        "App Key e App Secret da Omie no código, no HTML ou no Streamlit.",
         "Senha do painel em texto claro (apenas hash PBKDF2).",
         "JSON de vendas em claro no GitHub (apenas arquivos .enc).",
         "Arquivos .env e .streamlit/secrets.toml no git.",

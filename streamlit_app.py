@@ -33,8 +33,6 @@ except Exception:  # sem secrets.toml (execução local)
 from backend.app import omie, painel, relatorio  # noqa: E402  (depois de carregar as credenciais)
 
 EMPRESA = os.getenv("OMIE_EMPRESA", "JCA Filial")
-# empresa → arquivo publicado por scripts/publicar_dados.py no mesmo branch de PAINEL_DATA_URL
-ARQUIVOS = {"Filial": "painel.enc", "Matriz": "painel_matriz.enc"}
 if os.getenv("PAINEL_DATA_URL") and os.getenv("PAINEL_DATA_KEY"):
     FONTE = "snapshot"
 elif os.getenv("OMIE_FILIAL_APP_KEY") and os.getenv("OMIE_FILIAL_APP_SECRET"):
@@ -112,19 +110,16 @@ class ErroSnapshot(RuntimeError):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def snapshot(empresa: str = "Filial") -> dict:
+def snapshot() -> dict:
     import httpx
     from cryptography.fernet import Fernet, InvalidToken
 
     url = os.environ["PAINEL_DATA_URL"].strip().strip('"')
-    url = url.rsplit("/", 1)[0] + "/" + ARQUIVOS[empresa]
     chave = os.environ["PAINEL_DATA_KEY"].strip().strip('"').replace(" ", "")
     try:
         r = httpx.get(url, params={"t": int(time.time() // 300)}, timeout=60, follow_redirects=True)
     except httpx.HTTPError:
         raise ErroSnapshot("Não foi possível baixar os dados (falha de rede). Tente de novo em instantes.")
-    if r.status_code == 404 and empresa != "Filial":
-        raise ErroSnapshot(f"Os dados da {empresa} ainda não foram publicados. Tente de novo em alguns minutos.")
     if r.status_code != 200:
         raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira PAINEL_DATA_URL.")
     try:
@@ -166,17 +161,13 @@ if FONTE == "sample":
                "PAINEL_DATA_KEY em Settings > Secrets do app.")
 
 hoje = date.today()
-c0, c1, c1b, c1c, c2, c3, c4 = st.columns([1.4, 1.1, 1.1, 2.4, 1.1, 1.4, 2.4])
-empresa = "Filial"
-if FONTE == "snapshot":
-    with c0:
-        empresa = st.segmented_control("Empresa", list(ARQUIVOS), default="Filial", key="empresa") or "Filial"
+c1, c1b, c1c, c2, c3, c4 = st.columns([1.1, 1.1, 2.4, 1.1, 1.4, 2.4])
 snap = None
 if FONTE == "snapshot":
     try:
         with st.spinner("Carregando dados…"):
-            snap = snapshot(empresa)
-            EMPRESA = snap.get("empresa") or f"JCA {empresa}"
+            snap = snapshot()
+            EMPRESA = snap.get("empresa") or EMPRESA
     except ErroSnapshot as e:
         st.error(str(e))
         st.stop()
@@ -272,9 +263,8 @@ def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
     st.session_state.update(de=_br(ini_a), ate=_br(fim_a), atalho=None)
 
 
-# Troca de empresa muda os limites; reinicia o período no padrão dela.
-if st.session_state.get("per_empresa") != empresa or "de" not in st.session_state:
-    st.session_state.update(de=_br(padrao[0]), ate=_br(padrao[1]), per_empresa=empresa)
+if "de" not in st.session_state:
+    st.session_state.update(de=_br(padrao[0]), ate=_br(padrao[1]))
 with c1:
     st.text_input("De", key="de", placeholder="DD/MM/AAAA", max_chars=10, on_change=_normalizar, args=("de",))
 with c1b:
@@ -333,14 +323,8 @@ else:
     fonte_txt = "Omie" if FONTE == "omie" else "dados fictícios de demonstração"
     hist, hist_ini, hist_fim = rows_prev + rows, (p_ini if rows_prev else inicio), fim
 
-# PDV/NFC-e só na Filial; o flag vai no HTML para o filtro/gráfico sumirem na Matriz.
-tem_pdv = empresa == "Filial"
-if tem_pdv is False:
-    rows = [r for r in rows if r.get("ch") != "PDV"]
-    rows_prev = [r for r in rows_prev if r.get("ch") != "PDV"]
-    hist = [r for r in hist if r.get("ch") != "PDV"]
 # Histórico completo vai junto para a seção Relatório (comparativos e previsão).
-extra = {"tem_pdv": tem_pdv, "hist": hist, "hist_inicio": hist_ini, "hist_fim": hist_fim}
+extra = {"tem_pdv": True, "hist": hist, "hist_inicio": hist_ini, "hist_fim": hist_fim}
 html_app = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
                               modo="app", **extra)
 html_rel = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,

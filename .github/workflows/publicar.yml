@@ -28,15 +28,12 @@ jobs:
       TZ: America/Sao_Paulo
       DEFAULT_INICIO: "2026-07-01"
       OMIE_EMPRESA: JCA Filial
-      OMIE_EMPRESA_MATRIZ: JCA Matriz
-      # tempo máximo de ConsultarPedido por empresa a cada execução; o restante fica para as próximas
+      # tempo máximo de ConsultarPedido a cada execução; o restante fica para as próximas
       PEDIDOS_MAX_SEG: "600"
       # meses fechados (após o dia 1 às 23:59) ficam congelados; domingo revalida; botão manual também
       REPROCESSAR: ${{ inputs.reprocessar }}
       OMIE_FILIAL_APP_KEY: ${{ secrets.OMIE_APP_KEY }}
       OMIE_FILIAL_APP_SECRET: ${{ secrets.OMIE_APP_SECRET }}
-      OMIE_MATRIZ_APP_KEY: ${{ secrets.OMIE_MATRIZ_APP_KEY }}
-      OMIE_MATRIZ_APP_SECRET: ${{ secrets.OMIE_MATRIZ_APP_SECRET }}
       PAINEL_DATA_KEY: ${{ secrets.PAINEL_DATA_KEY }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -55,29 +52,29 @@ jobs:
       # consumidor_final de cada pedido (ConsultarPedido); sem o cache a Omie bloqueia por excesso de chamadas
       - uses: actions/cache/restore@v4
         with:
-          path: backend/data/cache_pedidos*.json
+          path: backend/data/cache_pedidos.json
           key: pedidos-${{ github.run_id }}
           restore-keys: pedidos-
 
       # meses fechados já consultados (cifrados com PAINEL_DATA_KEY)
       - uses: actions/cache/restore@v4
         with:
-          path: backend/data/cache_congelado_*.enc
+          path: backend/data/cache_congelado_filial.enc
           key: congelado-${{ github.run_id }}
           restore-keys: congelado-
 
       - run: python scripts/publicar_dados.py
 
       - uses: actions/cache/save@v4
-        if: always() && hashFiles('backend/data/cache_pedidos*.json') != ''
+        if: always() && hashFiles('backend/data/cache_pedidos.json') != ''
         with:
-          path: backend/data/cache_pedidos*.json
+          path: backend/data/cache_pedidos.json
           key: pedidos-${{ github.run_id }}
 
       - uses: actions/cache/save@v4
-        if: always() && hashFiles('backend/data/cache_congelado_*.enc') != ''
+        if: always() && hashFiles('backend/data/cache_congelado_filial.enc') != ''
         with:
-          path: backend/data/cache_congelado_*.enc
+          path: backend/data/cache_congelado_filial.enc
           key: congelado-${{ github.run_id }}
 
       # Próxima execução 20 min após o início desta. Cancelar uma execução manualmente interrompe a corrente

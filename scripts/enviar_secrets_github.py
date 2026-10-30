@@ -1,6 +1,6 @@
 """Cadastra as chaves em GitHub > Settings > Secrets > Actions sem exibi-las.
 
-Lê as variáveis de ambiente do usuário do Windows (OMIE_FILIAL_*, OMIE_APP_* da matriz e PAINEL_DATA_KEY).
+Lê as variáveis de ambiente do usuário do Windows (OMIE_FILIAL_* e PAINEL_DATA_KEY).
 Requer `gh auth login`. Uso: python scripts/enviar_secrets_github.py
 """
 import subprocess
@@ -16,8 +16,6 @@ REPO = "lelisson/FATURAMENTOLOJAJCA"
 ORIGEM = {
     "OMIE_APP_KEY": "OMIE_FILIAL_APP_KEY",
     "OMIE_APP_SECRET": "OMIE_FILIAL_APP_SECRET",
-    "OMIE_MATRIZ_APP_KEY": "OMIE_APP_KEY",
-    "OMIE_MATRIZ_APP_SECRET": "OMIE_APP_SECRET",
     "PAINEL_DATA_KEY": "PAINEL_DATA_KEY",
 }
 

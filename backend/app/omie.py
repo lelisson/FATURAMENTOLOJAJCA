@@ -49,9 +49,9 @@ POR_PAGINA_NF = 50
 POR_PAGINA_CUPOM = 100
 
 
-# Empresa ativa → chaves OMIE_FILIAL_APP_KEY / OMIE_MATRIZ_APP_KEY. As chamadas de uma empresa rodam
-# em sequência (publicar_dados.py), então um global basta, inclusive nas threads de _paginar.
-EMPRESAS = ("filial", "matriz")
+# Empresa ativa → chaves OMIE_FILIAL_APP_KEY / OMIE_FILIAL_APP_SECRET. A matriz tem repositório próprio
+# (FATURAMENTOMATRIZJCA).
+EMPRESAS = ("filial",)
 _empresa = "filial"
 
 
@@ -60,16 +60,6 @@ def usar_empresa(empresa: str) -> None:
     if empresa not in EMPRESAS:
         raise ValueError(empresa)
     _empresa = empresa
-
-
-def carregar_chaves_matriz_local() -> None:
-    """No PC, as chaves da matriz são OMIE_APP_KEY/OMIE_APP_SECRET do usuário do Windows (as mesmas dos
-    scripts de estoque); no GitHub Actions já vêm como OMIE_MATRIZ_*."""
-    if ambiente.ler("OMIE_MATRIZ_APP_KEY"):
-        return
-    k, s = ambiente.ler("OMIE_APP_KEY"), ambiente.ler("OMIE_APP_SECRET")
-    if k and s:
-        os.environ["OMIE_MATRIZ_APP_KEY"], os.environ["OMIE_MATRIZ_APP_SECRET"] = k, s
 
 
 def _credenciais() -> tuple[str, str]:
