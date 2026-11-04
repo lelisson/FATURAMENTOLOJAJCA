@@ -300,7 +300,7 @@ def pagina_financeiro() -> None:
                            file_name=f"Financeiro_JCA_Filial_{fin['inicio']}_a_{fin['fim']}.html", mime="text/html")
     with f3:
         gerado = datetime.fromtimestamp(fin["gerado_em"], ZoneInfo("America/Sao_Paulo"))
-        st.caption(f"Fonte: Omie (atualização automática a cada hora) · dados de {gerado:%d/%m/%Y %H:%M} · "
+        st.caption(f"Atualizado em {gerado:%d/%m/%Y %H:%M} · "
                    f"período {_br(date.fromisoformat(fin['inicio']))} a {_br(date.fromisoformat(fin['fim']))}")
     components.html(MASCARA_DATA, height=0)
     html_fin = fin_pagina.montar_html(fin, app=True)
@@ -378,7 +378,7 @@ if snap is not None:
     rows = [r for r in snap["rows"] if inicio <= r["d"] <= fim]
     rows_prev = [r for r in snap["rows"] if p_ini <= r["d"] <= p_fim] if p_ini >= snap["inicio"] else []
     est = snap.get("estoque") if fim == snap["fim"] else None
-    atualizado, fonte_painel, fonte_txt = snap["gerado_em"], "omie", "Omie (atualização automática)"
+    atualizado, fonte_painel = snap["gerado_em"], "omie"
     hist, hist_ini, hist_fim = snap["rows"], snap["inicio"], snap["fim"]
 else:
     try:
@@ -394,7 +394,6 @@ else:
         st.stop()
     atualizado = time.strftime("%d/%m/%Y %H:%M", time.localtime(ts))
     fonte_painel = FONTE
-    fonte_txt = "Omie" if FONTE == "omie" else "dados fictícios de demonstração"
     hist, hist_ini, hist_fim = rows_prev + rows, (p_ini if rows_prev else inicio), fim
 
 # Histórico completo vai junto para a seção Relatório (comparativos e previsão).
@@ -408,7 +407,7 @@ with c3:
                        file_name=f"Relatorio_Vendas_{EMPRESA.replace(' ', '_')}_{inicio}_a_{fim}.html", mime="text/html")
 with c4:
     comp = f" · comparativo {relatorio.dbr(p_ini)} a {relatorio.dbr(p_fim)}" if rows_prev else ""
-    st.caption(f"Fonte: {fonte_txt} · dados de {atualizado}{comp}")
+    st.caption(f"Atualizado em {atualizado}{comp}")
 
 if hasattr(st, "iframe"):
     st.iframe(html_app, height=1000)
