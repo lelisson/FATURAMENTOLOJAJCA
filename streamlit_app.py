@@ -47,6 +47,7 @@ st.markdown("""<style>
 header[data-testid="stHeader"]{display:none}
 .block-container{padding:.6rem 1rem 0;max-width:100%}
 div[data-testid="stHorizontalBlock"]{align-items:end}
+div[data-testid="stHorizontalBlock"]>div[data-testid="stColumn"]:first-child{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;margin-right:.75rem}
 iframe{border-radius:12px}
 </style>""", unsafe_allow_html=True)
 
@@ -264,6 +265,10 @@ PAGINAS = ("Faturamento", "Financeiro")
 if st.session_state.get("pagina") not in PAGINAS:
     st.session_state["pagina"] = st.session_state.get("pagina_atual", PAGINAS[0])
 st.session_state["pagina_atual"] = st.session_state["pagina"]
+# Mantém o período digitado ao passar pelo Financeiro (o Streamlit descarta campos que não aparecem na página).
+for _campo in ("de", "ate"):
+    if _campo in st.session_state:
+        st.session_state[_campo] = st.session_state[_campo]
 
 
 def cabecalho(pesos: list[float]) -> list:
