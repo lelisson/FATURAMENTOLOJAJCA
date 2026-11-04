@@ -1,7 +1,7 @@
 """Publica os dados do painel, criptografados, no branch `dados` do GitHub (lido pelo app Streamlit).
 
-O branch recebe apenas `painel.enc` (JSON compactado e cifrado com Fernet/PAINEL_DATA_KEY) e é
-sobrescrito a cada execução, sem acumular histórico.
+O branch recebe apenas `painel.enc` (faturamento) e `financeiro.enc` (painel financeiro), ambos JSON
+compactado e cifrado com Fernet/PAINEL_DATA_KEY, e é sobrescrito a cada execução, sem acumular histórico.
 
 Uso: python scripts/publicar_dados.py
 Roda no GitHub Actions (.github/workflows/publicar.yml, chaves em GitHub Secrets) ou num PC com .env.
@@ -70,7 +70,12 @@ EMPRESAS = {
 }
 
 
-def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
+ARQ_FINANCEIRO = "financeiro.enc"
+VALIDOS = {arquivo for arquivo, _, _ in EMPRESAS.values()} | {ARQ_FINANCEIRO}
+
+
+def preparar() -> None:
+    """Parte do que já está publicado: o arquivo que falhar nesta execução mantém a versão anterior."""
     PASTA.mkdir(parents=True, exist_ok=True)
     if not (PASTA / ".git").exists():
         git("init", "-q", "-b", "dados")
@@ -78,11 +83,13 @@ def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
         if NO_ACTIONS:
             git("config", "user.name", "github-actions[bot]")
             git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-    # Parte do que já está publicado: a empresa que falhar nesta execução mantém o arquivo anterior.
     if git("fetch", "-q", "--depth", "1", "origin", "dados").returncode == 0:
         git("reset", "-q", "--hard", "FETCH_HEAD")
+
+
+def publicar(blobs: dict[str, bytes], carimbo: str) -> None:
     for antigo in PASTA.glob("*.enc"):
-        if antigo.name not in blobs:
+        if antigo.name not in VALIDOS:
             antigo.unlink()
     for arquivo, blob in blobs.items():
         (PASTA / arquivo).write_bytes(blob)
@@ -182,6 +189,48 @@ def gerar(empresa: str, fernet: Fernet, hoje: date) -> bytes | None:
     return blob
 
 
+# Painel financeiro (títulos e movimentos da filial): pesado na Omie, então no máximo a cada FIN_INTERVALO_MIN.
+FIN_INICIO = os.getenv("FIN_INICIO", "2026-01-01")
+FIN_INTERVALO_MIN = int(os.getenv("FIN_INTERVALO_MIN", "55"))
+
+
+def financeiro_recente(fernet: Fernet) -> bool:
+    arq = PASTA / ARQ_FINANCEIRO
+    if (os.getenv("REPROCESSAR") or "").strip().lower() in ("true", "1", "yes"):
+        return False
+    try:
+        gerado = json.loads(gzip.decompress(fernet.decrypt(arq.read_bytes())))["gerado_em"]
+    except Exception:
+        return False
+    return time.time() - gerado < FIN_INTERVALO_MIN * 60
+
+
+def gerar_financeiro(fernet: Fernet) -> bytes | None:
+    if financeiro_recente(fernet):
+        log("financeiro: publicado há menos de "
+            f"{FIN_INTERVALO_MIN} min; mantém o arquivo atual")
+        return None
+    from financeiro import omie as fin_omie, publicacao
+
+    if not fin_omie.credenciais_configuradas():
+        log("financeiro: chaves da filial não configuradas; mantém os dados anteriores")
+        return None
+    t0 = time.time()
+    try:
+        payload = publicacao.montar(FIN_INICIO)
+    except fin_omie.OmieBloqueada:
+        log("financeiro: Omie bloqueou temporariamente; tenta de novo na próxima execução")
+        return None
+    except Exception as e:  # só o tipo vai para o log
+        log(f"financeiro: falha ao consultar a Omie: {type(e).__name__}")
+        return None
+    bruto = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    blob = fernet.encrypt(gzip.compress(bruto))
+    log(f"financeiro: {len(payload['lanc'])} lançamentos, {len(payload['titulos'])} títulos, "
+        f"{len(blob) // 1024} KB, {time.time() - t0:.0f}s")
+    return blob
+
+
 def main() -> int:
     chave = ambiente.ler("PAINEL_DATA_KEY")
     if not chave:
@@ -194,6 +243,14 @@ def main() -> int:
         blob = gerar(empresa, fernet, hoje)
         if blob:
             blobs[arquivo] = blob
+    try:
+        preparar()
+    except Exception as e:
+        log(f"falha ao preparar o branch dados: {type(e).__name__}")
+        return 1
+    blob_fin = gerar_financeiro(fernet)
+    if blob_fin:
+        blobs[ARQ_FINANCEIRO] = blob_fin
     if not blobs:
         return 1
     try:
@@ -202,7 +259,7 @@ def main() -> int:
         log(f"falha ao publicar: {e}")
         return 1
     log(f"ok: publicado {', '.join(blobs)}")
-    return 0 if len(blobs) == len(EMPRESAS) else 1
+    return 0 if all(arquivo in blobs for arquivo, _, _ in EMPRESAS.values()) else 1
 
 
 if __name__ == "__main__":

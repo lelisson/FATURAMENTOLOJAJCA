@@ -35,6 +35,8 @@ jobs:
       OMIE_FILIAL_APP_KEY: ${{ secrets.OMIE_APP_KEY }}
       OMIE_FILIAL_APP_SECRET: ${{ secrets.OMIE_APP_SECRET }}
       PAINEL_DATA_KEY: ${{ secrets.PAINEL_DATA_KEY }}
+      # cache dos meses fechados do painel financeiro
+      FIN_JCA_CACHE_KEY: ${{ secrets.PAINEL_DATA_KEY }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
@@ -47,7 +49,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install httpx python-dotenv cryptography
+      - run: pip install httpx python-dotenv cryptography pandas
 
       # consumidor_final de cada pedido (ConsultarPedido); sem o cache a Omie bloqueia por excesso de chamadas
       - uses: actions/cache/restore@v4
@@ -63,6 +65,13 @@ jobs:
           key: congelado-${{ github.run_id }}
           restore-keys: congelado-
 
+      # painel financeiro: meses fechados já consultados (cifrados)
+      - uses: actions/cache/restore@v4
+        with:
+          path: data/cache_meses.enc
+          key: financeiro-${{ github.run_id }}
+          restore-keys: financeiro-
+
       - run: python scripts/publicar_dados.py
 
       - uses: actions/cache/save@v4
@@ -76,6 +85,12 @@ jobs:
         with:
           path: backend/data/cache_congelado_filial.enc
           key: congelado-${{ github.run_id }}
+
+      - uses: actions/cache/save@v4
+        if: always() && hashFiles('data/cache_meses.enc') != ''
+        with:
+          path: data/cache_meses.enc
+          key: financeiro-${{ github.run_id }}
 
       # Próxima execução 20 min após o início desta. Cancelar uma execução manualmente interrompe a corrente
       # (o cron acima a retoma); a concorrência mantém no máximo uma rodando e uma na fila.

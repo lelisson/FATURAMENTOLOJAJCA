@@ -14,3 +14,6 @@ backup/
 __pycache__/
 .venv/
 *.pyc
+
+# cache local do painel financeiro
+data/

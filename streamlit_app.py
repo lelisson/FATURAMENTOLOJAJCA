@@ -1,4 +1,5 @@
-"""App Streamlit: o mesmo painel do localhost:8000.
+"""App Streamlit: o mesmo painel do localhost:8000 (Faturamento) e o painel financeiro da filial (Financeiro),
+escolhidos pelos botões do cabeçalho.
 
 Fontes de dados, nesta ordem:
 - snapshot: PAINEL_DATA_URL + PAINEL_DATA_KEY → arquivo criptografado publicado pelo GitHub Actions
@@ -16,6 +17,7 @@ import os
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -40,7 +42,7 @@ elif os.getenv("OMIE_FILIAL_APP_KEY") and os.getenv("OMIE_FILIAL_APP_SECRET"):
 else:
     FONTE = "sample"
 
-st.set_page_config(page_title="Vendas · JCA", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Painel · JCA Filial", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""<style>
 header[data-testid="stHeader"]{display:none}
 .block-container{padding:.6rem 1rem 0;max-width:100%}
@@ -109,17 +111,17 @@ class ErroSnapshot(RuntimeError):
     pass
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def snapshot() -> dict:
+def _baixar(url: str, nao_publicado: str | None = None) -> dict:
     import httpx
     from cryptography.fernet import Fernet, InvalidToken
 
-    url = os.environ["PAINEL_DATA_URL"].strip().strip('"')
     chave = os.environ["PAINEL_DATA_KEY"].strip().strip('"').replace(" ", "")
     try:
         r = httpx.get(url, params={"t": int(time.time() // 300)}, timeout=60, follow_redirects=True)
     except httpx.HTTPError:
         raise ErroSnapshot("Não foi possível baixar os dados (falha de rede). Tente de novo em instantes.")
+    if r.status_code == 404 and nao_publicado:
+        raise ErroSnapshot(nao_publicado)
     if r.status_code != 200:
         raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira PAINEL_DATA_URL.")
     try:
@@ -131,6 +133,23 @@ def snapshot() -> dict:
         return json.loads(gzip.decompress(f.decrypt(r.content)))
     except InvalidToken:
         raise ErroSnapshot("PAINEL_DATA_KEY não corresponde à chave usada na publicação. Copie de novo do .env.")
+
+
+def _url_dados() -> str:
+    return os.environ["PAINEL_DATA_URL"].strip().strip('"')
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def snapshot() -> dict:
+    return _baixar(_url_dados())
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def snapshot_financeiro() -> dict:
+    """financeiro.enc fica ao lado do painel.enc no branch `dados`."""
+    return _baixar(_url_dados().rsplit("/", 1)[0] + "/financeiro.enc",
+                   "O painel financeiro ainda não foi publicado. A primeira publicação sai na próxima "
+                   "atualização automática (até 20 min).")
 
 
 def _buscar(inicio: str, fim: str):
@@ -159,29 +178,6 @@ exigir_senha()
 if FONTE == "sample":
     st.warning("Dados FICTÍCIOS de demonstração. Para ver as vendas reais, cadastre PAINEL_DATA_URL e "
                "PAINEL_DATA_KEY em Settings > Secrets do app.")
-
-hoje = date.today()
-c1, c1b, c1c, c2, c3, c4 = st.columns([1.1, 1.1, 2.4, 1.1, 1.4, 2.4])
-snap = None
-if FONTE == "snapshot":
-    try:
-        with st.spinner("Carregando dados…"):
-            snap = snapshot()
-            EMPRESA = snap.get("empresa") or EMPRESA
-    except ErroSnapshot as e:
-        st.error(str(e))
-        st.stop()
-    except Exception as e:
-        st.error(f"Não foi possível carregar os dados publicados ({type(e).__name__}).")
-        st.stop()
-    lim_ini, lim_fim = date.fromisoformat(snap["inicio"]), date.fromisoformat(snap["fim"])
-    padrao = (max(date.fromisoformat(snap.get("inicio_padrao", snap["inicio"])), lim_ini), lim_fim)
-elif FONTE == "omie":
-    lim_ini, lim_fim = None, hoje
-    padrao = (inicio_padrao(hoje), hoje)
-else:
-    lim_ini, lim_fim = date(2026, 7, 1), date(2026, 9, 30)
-    padrao = (lim_ini, lim_fim)
 
 # Período digitado (DD/MM/AAAA); o calendário de intervalo do Streamlit recarrega a página no meio da seleção.
 ATALHOS = ("Mês atual", "Mês anterior", "Trimestre")
@@ -262,6 +258,84 @@ def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
         ini_a, fim_a = max(ini_a, lim_ini), max(fim_a, lim_ini)
     st.session_state.update(de=_br(ini_a), ate=_br(fim_a), atalho=None)
 
+
+# Botões do cabeçalho: escolhem qual painel aparece.
+PAGINAS = ("Faturamento", "Financeiro")
+if st.session_state.get("pagina") not in PAGINAS:
+    st.session_state["pagina"] = st.session_state.get("pagina_atual", PAGINAS[0])
+st.session_state["pagina_atual"] = st.session_state["pagina"]
+
+
+def cabecalho(pesos: list[float]) -> list:
+    """Primeira coluna com os botões Faturamento/Financeiro; devolve as demais colunas."""
+    cols = st.columns([1.5, *pesos])
+    with cols[0]:
+        st.segmented_control("Painel", PAGINAS, key="pagina")
+    return cols[1:]
+
+
+def pagina_financeiro() -> None:
+    f1, f2, f3 = cabecalho([1.1, 1.4, 6.0])
+    if FONTE != "snapshot":
+        st.info("O painel financeiro usa os dados publicados automaticamente. Cadastre PAINEL_DATA_URL e "
+                "PAINEL_DATA_KEY em Settings > Secrets do app.")
+        st.stop()
+    try:
+        with st.spinner("Carregando financeiro…"):
+            fin = snapshot_financeiro()
+    except ErroSnapshot as e:
+        st.error(str(e))
+        st.stop()
+    except Exception as e:
+        st.error(f"Não foi possível carregar o financeiro publicado ({type(e).__name__}).")
+        st.stop()
+    from financeiro import pagina as fin_pagina
+
+    with f1:
+        if st.button("Atualizar dados", use_container_width=True):
+            snapshot_financeiro.clear()
+            st.rerun()
+    with f2:
+        st.download_button("Baixar relatório (HTML)", fin_pagina.montar_html(fin), use_container_width=True,
+                           file_name=f"Financeiro_JCA_Filial_{fin['inicio']}_a_{fin['fim']}.html", mime="text/html")
+    with f3:
+        gerado = datetime.fromtimestamp(fin["gerado_em"], ZoneInfo("America/Sao_Paulo"))
+        st.caption(f"Fonte: Omie (atualização automática a cada hora) · dados de {gerado:%d/%m/%Y %H:%M} · "
+                   f"período {_br(date.fromisoformat(fin['inicio']))} a {_br(date.fromisoformat(fin['fim']))}")
+    components.html(MASCARA_DATA, height=0)
+    html_fin = fin_pagina.montar_html(fin, app=True)
+    if hasattr(st, "iframe"):
+        st.iframe(html_fin, height=1000)
+    else:
+        components.html(html_fin, height=1000, scrolling=True)
+    st.stop()
+
+
+if st.session_state["pagina"] == "Financeiro":
+    pagina_financeiro()
+
+hoje = date.today()
+c1, c1b, c1c, c2, c3, c4 = cabecalho([1.1, 1.1, 2.4, 1.1, 1.4, 2.4])
+snap = None
+if FONTE == "snapshot":
+    try:
+        with st.spinner("Carregando dados…"):
+            snap = snapshot()
+            EMPRESA = snap.get("empresa") or EMPRESA
+    except ErroSnapshot as e:
+        st.error(str(e))
+        st.stop()
+    except Exception as e:
+        st.error(f"Não foi possível carregar os dados publicados ({type(e).__name__}).")
+        st.stop()
+    lim_ini, lim_fim = date.fromisoformat(snap["inicio"]), date.fromisoformat(snap["fim"])
+    padrao = (max(date.fromisoformat(snap.get("inicio_padrao", snap["inicio"])), lim_ini), lim_fim)
+elif FONTE == "omie":
+    lim_ini, lim_fim = None, hoje
+    padrao = (inicio_padrao(hoje), hoje)
+else:
+    lim_ini, lim_fim = date(2026, 7, 1), date(2026, 9, 30)
+    padrao = (lim_ini, lim_fim)
 
 if "de" not in st.session_state:
     st.session_state.update(de=_br(padrao[0]), ate=_br(padrao[1]))
