@@ -64,7 +64,8 @@ button,select,input{font:inherit;color:inherit}
 .ctl{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:13px;color:var(--ink);max-width:190px}
 .tw-bar{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;padding:12px 16px}
 .tw-fld{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
-:root[data-theme="dark"] .tw-fld .ctl{color-scheme:dark}
+.tw-data{width:118px}
+.tw-data[aria-invalid="true"]{border-color:var(--bad)}
 .btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink2)}
 .btn:hover{color:var(--ink);border-color:var(--ink3)}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -271,8 +272,8 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
         <div class="seg" id="twPer" role="group" aria-label="Período de vencimento">
           <button type="button" data-p="90">Até 90 dias</button><button type="button" data-p="d">Hoje</button><button type="button" data-p="w">Esta semana</button><button type="button" data-p="m">Este mês</button><button type="button" data-p="q">Este trimestre</button>
         </div>
-        <label class="tw-fld">De<input type="date" class="ctl" id="twIni" aria-label="Vencimento de"></label>
-        <label class="tw-fld">Até<input type="date" class="ctl" id="twFim" aria-label="Vencimento até"></label>
+        <label class="tw-fld">De<input type="text" class="ctl tw-data" id="twIni" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" autocomplete="off" aria-label="Vencimento de"></label>
+        <label class="tw-fld">Até<input type="text" class="ctl tw-data" id="twFim" placeholder="DD/MM/AAAA" maxlength="10" inputmode="numeric" autocomplete="off" aria-label="Vencimento até"></label>
         <button type="button" class="btn" id="twVenc" title="Somar também os títulos vencidos antes do início do período">Incluir vencidos</button>
       </div>
     </div>
@@ -597,17 +598,31 @@ function twLinhas(){
   const depois=b?D.aberto.filter(r=>okFiltros(r)&&r.dv>b):[];
   return {a,b,ab,tit,antes:ab.filter(antes),depois};
 }
+// Datas digitadas como DD/MM/AAAA: a barra entra sozinha e o período só é aplicado com a data completa.
+const mascaraData=v=>{const d=v.replace(/\D/g,'').slice(0,8);return d.slice(0,2)+(d.length>2?'/'+d.slice(2,4):'')+(d.length>4?'/'+d.slice(4):'')};
+const brIso=s=>{const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);if(!m)return null;const iso=`${m[3]}-${m[2]}-${m[1]}`,t=Date.parse(iso+'T00:00:00Z');
+  return isNaN(t)||new Date(t).toISOString().slice(0,10)!==iso?null:iso};
 function twSync(){
-  const [a,b]=twJanela();$('twIni').value=a||'';$('twFim').value=b||'';
+  const [a,b]=twJanela();
+  [['twIni',a],['twFim',b]].forEach(([id,v])=>{const el=$(id);if(document.activeElement!==el){el.value=v?dbr(v):'';el.removeAttribute('aria-invalid')}});
   [...$('twPer').children].forEach(x=>x.setAttribute('aria-pressed',x.dataset.p===tw.p));
   $('twVenc').setAttribute('aria-pressed',tw.venc);
 }
+function twAplicarDatas(final){
+  const ler=id=>{const v=$(id).value.trim();return v?brIso(v):''};
+  const a=ler('twIni'),b=ler('twFim'),ruim=a===null||b===null||(a&&b&&a>b);
+  if(final)[['twIni',a],['twFim',b]].forEach(([id,v])=>$(id).setAttribute('aria-invalid',v===null||ruim));
+  if(ruim)return;
+  $('twIni').removeAttribute('aria-invalid');$('twFim').removeAttribute('aria-invalid');
+  const [ja,jb]=twJanela();if(a===(ja||'')&&b===(jb||''))return;
+  Object.assign(tw,{p:'c',ini:a,fim:b,g:a&&b?twGrupoPorDias(dias(a,b)+1):'m'});
+  renderTitulos();
+}
 $('twPer').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;tw.p=b.dataset.p;tw.g=TW_GRUPO[tw.p];renderTitulos()});
-['twIni','twFim'].forEach(id=>$(id).addEventListener('change',()=>{
-  tw.p='c';tw.ini=$('twIni').value;tw.fim=$('twFim').value;
-  if(tw.ini&&tw.fim&&tw.ini>tw.fim)[tw.ini,tw.fim]=[tw.fim,tw.ini];
-  tw.g=tw.ini&&tw.fim?twGrupoPorDias(dias(tw.ini,tw.fim)+1):'m';
-  renderTitulos()}));
+['twIni','twFim'].forEach(id=>{const el=$(id);
+  el.addEventListener('input',()=>{el.value=mascaraData(el.value);if(el.value.length===10)twAplicarDatas(false)});
+  el.addEventListener('blur',()=>twAplicarDatas(true));
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();twAplicarDatas(true)}})});
 $('twVenc').onclick=()=>{tw.venc=!tw.venc;renderTitulos()};
 
 function renderTitulos(){
