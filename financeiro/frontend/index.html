@@ -63,7 +63,6 @@ button,select,input{font:inherit;color:inherit}
 .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .ctl{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:13px;color:var(--ink);max-width:190px}
 .tw-bar{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;padding:12px 16px}
-.tw-lab{font-size:12.5px;font-weight:600;color:var(--ink2)}
 .tw-fld{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)}
 :root[data-theme="dark"] .tw-fld .ctl{color-scheme:dark}
 .btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink2)}
@@ -269,19 +268,12 @@ dialog h3{font-size:16px}dialog p{margin:6px 0 14px}
     <div class="sh"><h2>Contas a pagar e receber</h2><span class="muted" id="horizSub"></span></div>
     <div class="card tw-bar">
       <div class="tools">
-        <span class="tw-lab">Vencimento</span>
         <div class="seg" id="twPer" role="group" aria-label="Período de vencimento">
           <button type="button" data-p="90">Até 90 dias</button><button type="button" data-p="d">Hoje</button><button type="button" data-p="w">Esta semana</button><button type="button" data-p="m">Este mês</button><button type="button" data-p="q">Este trimestre</button>
         </div>
         <label class="tw-fld">De<input type="date" class="ctl" id="twIni" aria-label="Vencimento de"></label>
         <label class="tw-fld">Até<input type="date" class="ctl" id="twFim" aria-label="Vencimento até"></label>
         <button type="button" class="btn" id="twVenc" title="Somar também os títulos vencidos antes do início do período">Incluir vencidos</button>
-      </div>
-      <div class="tools">
-        <span class="tw-lab">Agrupar</span>
-        <div class="seg" id="twGrp" role="group" aria-label="Agrupar por">
-          <button type="button" data-g="d">Diário</button><button type="button" data-g="w">Semanal</button><button type="button" data-g="m">Mensal</button><button type="button" data-g="q">Trimestral</button>
-        </div>
       </div>
     </div>
     <div class="grid g6" id="tKpis"></div>
@@ -568,9 +560,10 @@ function renderCustos(){
 }
 
 /* ---------- títulos ---------- */
-// Janela de vencimento (atalhos fixos ou De/Até) e agrupamento do resumo/gráfico.
+// Janela de vencimento (atalhos fixos ou De/Até); o agrupamento do resumo/gráfico acompanha o tamanho da janela.
 const tw={p:'90',ini:'',fim:'',g:'m',venc:true};
 const TW_GRUPO={'90':'m',d:'d',w:'d',m:'w',q:'m'};
+const twGrupoPorDias=n=>n<=14?'d':n<=92?'w':n<=366?'m':'q';
 const TW_NOME={'90':`próximos ${HORIZONTE_DIAS} dias`,d:'hoje',w:'esta semana',m:'este mês',q:'este trimestre'};
 const NOMES_TRI=['1º tri','2º tri','3º tri','4º tri'];
 function twJanela(){
@@ -607,14 +600,13 @@ function twLinhas(){
 function twSync(){
   const [a,b]=twJanela();$('twIni').value=a||'';$('twFim').value=b||'';
   [...$('twPer').children].forEach(x=>x.setAttribute('aria-pressed',x.dataset.p===tw.p));
-  [...$('twGrp').children].forEach(x=>x.setAttribute('aria-pressed',x.dataset.g===tw.g));
   $('twVenc').setAttribute('aria-pressed',tw.venc);
 }
 $('twPer').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;tw.p=b.dataset.p;tw.g=TW_GRUPO[tw.p];renderTitulos()});
-$('twGrp').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;tw.g=b.dataset.g;renderTitulos()});
 ['twIni','twFim'].forEach(id=>$(id).addEventListener('change',()=>{
   tw.p='c';tw.ini=$('twIni').value;tw.fim=$('twFim').value;
   if(tw.ini&&tw.fim&&tw.ini>tw.fim)[tw.ini,tw.fim]=[tw.fim,tw.ini];
+  tw.g=tw.ini&&tw.fim?twGrupoPorDias(dias(tw.ini,tw.fim)+1):'m';
   renderTitulos()}));
 $('twVenc').onclick=()=>{tw.venc=!tw.venc;renderTitulos()};
 
