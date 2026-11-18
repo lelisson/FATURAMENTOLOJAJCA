@@ -481,6 +481,20 @@ def main(*, embutido: bool = False) -> None:
     if not embutido:
         st.set_page_config(page_title=TITULO_PAINEL, page_icon="📟", layout="wide")
     inject_css()
+    if embutido:
+        # No app unificado o cabeçalho já tem MATRIZ|FILIAL|OLARIA; evita o título gigante e a sidebar.
+        st.markdown(
+            """<style>
+            [data-testid="stSidebar"]{display:none}
+            [data-testid="stHorizontalBlock"]:has(.titulo-painel){
+                background:transparent!important;border:0!important;box-shadow:none!important;
+                padding:.2rem 0 .55rem!important;margin:0!important;
+            }
+            .titulo-painel{font-size:1.05rem!important;font-weight:600!important;color:#8B9BB4!important}
+            .periodo-banner{font-size:1.15rem!important;margin-top:.35rem!important;padding-top:.35rem!important}
+            </style>""",
+            unsafe_allow_html=True,
+        )
 
     if not embutido and not acesso_autorizado():
         return
@@ -495,29 +509,31 @@ def main(*, embutido: bool = False) -> None:
     if "last_omie_auto" not in st.session_state:
         st.session_state.last_omie_auto = 0.0
 
-    with st.sidebar:
-        st.markdown("### Atualização")
-        auto = st.slider("Recarregar painel (s)", 0, 120, 0 if embutido else 30, 5, key="olaria_auto")
-        omie_auto = st.slider("Sincronizar Omie (min, 0=off)", 0, 120, 0, 5, key="olaria_omie_auto")
-        if auto > 0 and st_autorefresh:
-            st_autorefresh(interval=auto * 1000, key="olaria_refresh")
-        if omie_auto > 0 and time.time() - st.session_state.last_omie_auto >= omie_auto * 60:
-            _executar_sync(path)
-            st.session_state.last_omie_auto = time.time()
-        st.markdown("---")
-        st.markdown("**Somente leitura**")
-        st.caption(f"Base: `{path.name}`")
-        if credenciais_configuradas():
-            st.caption("Omie: credenciais OK · sync em Faturamento (receitas).")
-        else:
-            st.caption("Omie: configure secrets `[omie]` se quiser sincronizar receitas.")
-        st.caption("Despesas: aba Lançamentos no Excel.")
+    if not embutido:
+        with st.sidebar:
+            st.markdown("### Atualização")
+            auto = st.slider("Recarregar painel (s)", 0, 120, 30, 5, key="olaria_auto")
+            omie_auto = st.slider("Sincronizar Omie (min, 0=off)", 0, 120, 0, 5, key="olaria_omie_auto")
+            if auto > 0 and st_autorefresh:
+                st_autorefresh(interval=auto * 1000, key="olaria_refresh")
+            if omie_auto > 0 and time.time() - st.session_state.last_omie_auto >= omie_auto * 60:
+                _executar_sync(path)
+                st.session_state.last_omie_auto = time.time()
+            st.markdown("---")
+            st.markdown("**Somente leitura**")
+            st.caption(f"Base: `{path.name}`")
+            if credenciais_configuradas():
+                st.caption("Omie: credenciais OK · sync em Faturamento (receitas).")
+            else:
+                st.caption("Omie: configure secrets `[omie]` se quiser sincronizar receitas.")
+            st.caption("Despesas: aba Lançamentos no Excel.")
 
     hc, hb = st.columns([5.2, 1.15], vertical_alignment="center")
     with hc:
-        st.markdown(f'<h1 class="titulo-painel">{TITULO_PAINEL}</h1>', unsafe_allow_html=True)
+        titulo = "Custos · Galpão Olaria" if embutido else TITULO_PAINEL
+        st.markdown(f'<h1 class="titulo-painel">{titulo}</h1>', unsafe_allow_html=True)
     with hb:
-        if st.button("Atualizar", type="primary", use_container_width=True, key="btn_atualizar_header"):
+        if st.button("Atualizar dados", type="primary", use_container_width=True, key="btn_atualizar_header"):
             st.session_state.refresh_pending = True
 
     if st.session_state.refresh_pending:
@@ -531,7 +547,7 @@ def main(*, embutido: bool = False) -> None:
     try:
         d = carregar(mtime_planilha(path), str(path))
     except PermissionError:
-        st.error("Feche o Excel (`CUSTOS OLARIA.xlsx`) e clique em **Atualizar**.")
+        st.error("Feche o Excel (`CUSTOS OLARIA.xlsx`) e clique em **Atualizar dados**.")
         return
     except Exception as e:
         st.error(f"Erro ao carregar a planilha: {type(e).__name__}")
@@ -540,9 +556,12 @@ def main(*, embutido: bool = False) -> None:
     ano = d["ano"]
     mes_padrao = min(datetime.now().month - 1, 11)
     todas_cats = sorted(set(CATEGORIAS_PADRAO + list(d["por_categoria_ano"].keys())))
-    cats_sel = st.sidebar.multiselect(
-        "Filtrar categorias (opcional)", todas_cats, default=[], key="olaria_cats"
-    )
+    if embutido:
+        cats_sel = []
+    else:
+        cats_sel = st.sidebar.multiselect(
+            "Filtrar categorias (opcional)", todas_cats, default=[], key="olaria_cats"
+        )
 
     with st.container(border=True):
         st.markdown(
@@ -551,7 +570,11 @@ def main(*, embutido: bool = False) -> None:
             "(ou <strong>Ano</strong> para ver o total anual).</p>",
             unsafe_allow_html=True,
         )
-        fa, fm = st.columns([1.35, 10], gap="medium")
+        if embutido:
+            fa, fm, fc, fat = st.columns([1.1, 6.5, 2.6, 1.3], gap="medium")
+        else:
+            fa, fm = st.columns([1.35, 10], gap="medium")
+            fc = fat = None
         opcoes_mes = ["Ano", *MESES]
         with fa:
             st.markdown('<p class="filtro-label">Ano</p>', unsafe_allow_html=True)
@@ -565,6 +588,15 @@ def main(*, embutido: bool = False) -> None:
                 key="filtro_mes",
                 label_visibility="collapsed",
             )
+        if embutido and fc is not None:
+            with fc:
+                st.markdown('<p class="filtro-label">Categorias</p>', unsafe_allow_html=True)
+                cats_sel = st.multiselect(
+                    "Categorias", todas_cats, default=[], key="olaria_cats", label_visibility="collapsed"
+                )
+            with fat:
+                st.markdown('<p class="filtro-label">&nbsp;</p>', unsafe_allow_html=True)
+                st.caption("Somente leitura")
 
         if not sel_periodo:
             sel_periodo = MESES[mes_padrao]
