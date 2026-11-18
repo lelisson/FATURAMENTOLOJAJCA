@@ -1,13 +1,9 @@
-"""App Streamlit: o mesmo painel do localhost:8000 (Faturamento) e o painel financeiro da filial (Financeiro),
-escolhidos pelos botões do cabeçalho.
+"""App unificado JCA: MATRIZ | FILIAL | OLARIA no mesmo link (faturamentojca.streamlit.app).
 
-Fontes de dados, nesta ordem:
-- snapshot: PAINEL_DATA_URL + PAINEL_DATA_KEY → arquivo criptografado publicado pelo GitHub Actions
-  (scripts/publicar_dados.py). As chaves da Omie não ficam no Streamlit.
-- omie: OMIE_FILIAL_APP_KEY + OMIE_FILIAL_APP_SECRET → consulta direta da filial (somente leitura).
-- sample: dados fictícios (backend/data/vendas_demo.json).
+Em Matriz e Filial: Faturamento e Financeiro (dados publicados cifrados no GitHub).
+Em Olaria: painel de custos do galpão (planilha em olária/data).
 
-Senha: APP_PASSWORD_HASH (gerado por scripts/gerar_secrets.py); a senha em si não fica guardada.
+Senha: APP_PASSWORD_HASH (uma só para o app unificado).
 """
 import gzip
 import hashlib
@@ -32,17 +28,13 @@ try:
 except Exception:  # sem secrets.toml (execução local)
     pass
 
-from backend.app import omie, painel, relatorio  # noqa: E402  (depois de carregar as credenciais)
+from backend.app import omie, painel, relatorio  # noqa: E402
 
-EMPRESA = os.getenv("OMIE_EMPRESA", "JCA Filial")
-if os.getenv("PAINEL_DATA_URL") and os.getenv("PAINEL_DATA_KEY"):
-    FONTE = "snapshot"
-elif os.getenv("OMIE_FILIAL_APP_KEY") and os.getenv("OMIE_FILIAL_APP_SECRET"):
-    FONTE = "omie"
-else:
-    FONTE = "sample"
+EMPRESAS = ("MATRIZ", "FILIAL", "OLARIA")
+URL_FILIAL = "https://raw.githubusercontent.com/lelisson/FATURAMENTOLOJAJCA/dados/painel.enc"
+URL_MATRIZ = "https://raw.githubusercontent.com/lelisson/FATURAMENTOMATRIZJCA/dados/painel.enc"
 
-st.set_page_config(page_title="Painel · JCA Filial", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Painel · JCA", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""<style>
 header[data-testid="stHeader"]{display:none}
 .block-container{padding:.6rem 1rem 0;max-width:100%}
@@ -71,7 +63,7 @@ def exigir_senha() -> None:
     if not (os.getenv("APP_PASSWORD_HASH") or os.getenv("APP_PASSWORD")) or st.session_state.get("ok"):
         return
     with st.form("login"):
-        st.subheader("Painel de vendas · JCA")
+        st.subheader("Painel · JCA")
         tentativa = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             restante = st.session_state.get("bloqueio", 0) - time.time()
@@ -100,7 +92,6 @@ def inicio_padrao(hoje: date) -> date:
 
 
 def periodo_anterior(inicio: str, fim: str) -> tuple[str, str]:
-    """Um mês → mês anterior; período maior → trimestre anterior ao início (como o painel local)."""
     di = date.fromisoformat(inicio)
     if di.day == 1 and inicio[:7] == fim[:7]:
         return relatorio.periodo_comparacao(inicio, fim)
@@ -112,11 +103,11 @@ class ErroSnapshot(RuntimeError):
     pass
 
 
-def _baixar(url: str, nao_publicado: str | None = None) -> dict:
+def _baixar(url: str, chave: str, nao_publicado: str | None = None) -> dict:
     import httpx
     from cryptography.fernet import Fernet, InvalidToken
 
-    chave = os.environ["PAINEL_DATA_KEY"].strip().strip('"').replace(" ", "")
+    chave = chave.strip().strip('"').replace(" ", "")
     try:
         r = httpx.get(url, params={"t": int(time.time() // 300)}, timeout=60, follow_redirects=True)
     except httpx.HTTPError:
@@ -124,63 +115,73 @@ def _baixar(url: str, nao_publicado: str | None = None) -> dict:
     if r.status_code == 404 and nao_publicado:
         raise ErroSnapshot(nao_publicado)
     if r.status_code != 200:
-        raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira PAINEL_DATA_URL.")
+        raise ErroSnapshot(f"Download dos dados falhou (HTTP {r.status_code}). Confira a URL dos dados.")
     try:
         f = Fernet(chave.encode())
     except ValueError:
-        raise ErroSnapshot(f"PAINEL_DATA_KEY em formato inválido ({len(chave)} caracteres; o correto são 44, "
-                           "terminando com '='). Copie de novo do .env.")
+        raise ErroSnapshot(f"Chave de dados em formato inválido ({len(chave)} caracteres; o correto são 44, "
+                           "terminando com '=').")
     try:
         return json.loads(gzip.decompress(f.decrypt(r.content)))
     except InvalidToken:
-        raise ErroSnapshot("PAINEL_DATA_KEY não corresponde à chave usada na publicação. Copie de novo do .env.")
-
-
-def _url_dados() -> str:
-    return os.environ["PAINEL_DATA_URL"].strip().strip('"')
+        raise ErroSnapshot("A chave de dados não corresponde à usada na publicação.")
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def snapshot() -> dict:
-    return _baixar(_url_dados())
+def snapshot(url: str, chave: str) -> dict:
+    return _baixar(url, chave)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def snapshot_financeiro() -> dict:
-    """financeiro.enc fica ao lado do painel.enc no branch `dados`."""
-    return _baixar(_url_dados().rsplit("/", 1)[0] + "/financeiro.enc",
+def snapshot_financeiro(url: str, chave: str) -> dict:
+    return _baixar(url.rsplit("/", 1)[0] + "/financeiro.enc", chave,
                    "O painel financeiro ainda não foi publicado. A primeira publicação sai na próxima "
                    "atualização automática (até 20 min).")
 
 
-def _buscar(inicio: str, fim: str):
-    if FONTE == "omie":
+def _buscar(inicio: str, fim: str, fonte: str):
+    if fonte == "omie":
         return omie.vendas(inicio, fim), time.time()
     rows = json.loads((ROOT / "backend/data/vendas_demo.json").read_text(encoding="utf-8"))
     return [r for r in rows if inicio <= r["d"] <= fim], time.time()
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def vendas(inicio: str, fim: str):
-    return _buscar(inicio, fim)
+def vendas(inicio: str, fim: str, fonte: str):
+    return _buscar(inicio, fim, fonte)
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)
-def vendas_fechado(inicio: str, fim: str):
-    return _buscar(inicio, fim)
+def vendas_fechado(inicio: str, fim: str, fonte: str):
+    return _buscar(inicio, fim, fonte)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def estoque():
-    return omie.estoque_atual() if FONTE == "omie" else None
+def estoque(fonte: str):
+    return omie.estoque_atual() if fonte == "omie" else None
+
+
+def cfg_empresa(nome: str) -> dict:
+    """URL/chave/nome exibido e se tem PDV, conforme a empresa selecionada."""
+    if nome == "MATRIZ":
+        url = (os.getenv("PAINEL_MATRIZ_DATA_URL") or URL_MATRIZ).strip().strip('"')
+        chave = (os.getenv("PAINEL_MATRIZ_DATA_KEY") or "").strip().strip('"')
+        return {"url": url, "chave": chave, "empresa": "JCA Matriz", "tem_pdv": False,
+                "arquivo": "Financeiro_JCA_Matriz"}
+    url = (os.getenv("PAINEL_DATA_URL") or URL_FILIAL).strip().strip('"')
+    chave = (os.getenv("PAINEL_DATA_KEY") or "").strip().strip('"')
+    return {"url": url, "chave": chave, "empresa": "JCA Filial", "tem_pdv": True,
+            "arquivo": "Financeiro_JCA_Filial"}
 
 
 exigir_senha()
-if FONTE == "sample":
-    st.warning("Dados FICTÍCIOS de demonstração. Para ver as vendas reais, cadastre PAINEL_DATA_URL e "
-               "PAINEL_DATA_KEY em Settings > Secrets do app.")
 
-# Período digitado (DD/MM/AAAA); o calendário de intervalo do Streamlit recarrega a página no meio da seleção.
+# ---------- seletor de empresa ----------
+if st.session_state.get("empresa") not in EMPRESAS:
+    st.session_state["empresa"] = st.session_state.get("empresa_atual", "FILIAL")
+st.session_state["empresa_atual"] = st.session_state["empresa"]
+
+# Período digitado (DD/MM/AAAA).
 ATALHOS = ("Mês atual", "Mês anterior", "Trimestre")
 
 
@@ -204,8 +205,6 @@ def _normalizar(chave: str) -> None:
     st.session_state[chave] = _formatar_data(st.session_state.get(chave, ""))
 
 
-# Máscara DD/MM/AAAA nos campos De/Até e painel na altura da janela (menu e cabeçalho do painel ficam fixos;
-# só o conteúdo rola dentro dele, sem a página do Streamlit rolar junto).
 MASCARA_DATA = """<script>
 (function(){
   const P = window.parent, doc = P.document;
@@ -260,34 +259,66 @@ def _aplicar_atalho(lim_ini: date | None, lim_fim: date) -> None:
     st.session_state.update(de=_br(ini_a), ate=_br(fim_a), atalho=None)
 
 
-# Botões do cabeçalho: escolhem qual painel aparece.
 PAGINAS = ("Faturamento", "Financeiro")
 if st.session_state.get("pagina") not in PAGINAS:
     st.session_state["pagina"] = st.session_state.get("pagina_atual", PAGINAS[0])
 st.session_state["pagina_atual"] = st.session_state["pagina"]
-# Mantém o período digitado ao passar pelo Financeiro (o Streamlit descarta campos que não aparecem na página).
 for _campo in ("de", "ate"):
     if _campo in st.session_state:
         st.session_state[_campo] = st.session_state[_campo]
 
 
+def barra_empresa() -> None:
+    st.segmented_control("Empresa", EMPRESAS, key="empresa")
+
+
 def cabecalho(pesos: list[float]) -> list:
-    """Primeira coluna com os botões Faturamento/Financeiro; devolve as demais colunas."""
-    cols = st.columns([1.5, *pesos])
+    """Empresa + Faturamento/Financeiro na primeira faixa; devolve as demais colunas."""
+    cols = st.columns([1.8, 1.5, *pesos])
     with cols[0]:
+        barra_empresa()
+    with cols[1]:
         st.segmented_control("Painel", PAGINAS, key="pagina")
-    return cols[1:]
+    return cols[2:]
+
+
+def pagina_olaria() -> None:
+    c0, = st.columns([1.8])
+    with c0:
+        barra_empresa()
+    from olaria.app import main as olaria_main
+    olaria_main(embutido=True)
+    st.stop()
+
+
+if st.session_state["empresa"] == "OLARIA":
+    pagina_olaria()
+
+cfg = cfg_empresa(st.session_state["empresa"])
+EMPRESA = cfg["empresa"]
+TEM_PDV = cfg["tem_pdv"]
+tem_chave = bool(cfg["chave"])
+if tem_chave:
+    FONTE = "snapshot"
+elif os.getenv("OMIE_FILIAL_APP_KEY") and os.getenv("OMIE_FILIAL_APP_SECRET") and st.session_state["empresa"] == "FILIAL":
+    FONTE = "omie"
+else:
+    FONTE = "sample"
+
+if FONTE == "sample":
+    st.warning("Dados FICTÍCIOS de demonstração. Cadastre as chaves de dados em Settings > Secrets do app "
+               "(PAINEL_DATA_KEY para a Filial e PAINEL_MATRIZ_DATA_KEY para a Matriz).")
 
 
 def pagina_financeiro() -> None:
     f1, f2, f3 = cabecalho([1.1, 1.4, 6.0])
     if FONTE != "snapshot":
-        st.info("O painel financeiro usa os dados publicados automaticamente. Cadastre PAINEL_DATA_URL e "
-                "PAINEL_DATA_KEY em Settings > Secrets do app.")
+        st.info("O painel financeiro usa os dados publicados automaticamente. Cadastre as chaves em "
+                "Settings > Secrets do app.")
         st.stop()
     try:
         with st.spinner("Carregando financeiro…"):
-            fin = snapshot_financeiro()
+            fin = snapshot_financeiro(cfg["url"], cfg["chave"])
     except ErroSnapshot as e:
         st.error(str(e))
         st.stop()
@@ -301,14 +332,19 @@ def pagina_financeiro() -> None:
             snapshot_financeiro.clear()
             st.rerun()
     with f2:
-        st.download_button("Baixar relatório (HTML)", fin_pagina.montar_html(fin), use_container_width=True,
-                           file_name=f"Financeiro_JCA_Filial_{fin['inicio']}_a_{fin['fim']}.html", mime="text/html")
+        st.download_button(
+            "Baixar relatório (HTML)",
+            fin_pagina.montar_html(fin, empresa=EMPRESA, tem_pdv=TEM_PDV),
+            use_container_width=True,
+            file_name=f"{cfg['arquivo']}_{fin['inicio']}_a_{fin['fim']}.html",
+            mime="text/html",
+        )
     with f3:
         gerado = datetime.fromtimestamp(fin["gerado_em"], ZoneInfo("America/Sao_Paulo"))
         st.caption(f"Atualizado em {gerado:%d/%m/%Y %H:%M} · "
                    f"período {_br(date.fromisoformat(fin['inicio']))} a {_br(date.fromisoformat(fin['fim']))}")
     components.html(MASCARA_DATA, height=0)
-    html_fin = fin_pagina.montar_html(fin, app=True)
+    html_fin = fin_pagina.montar_html(fin, app=True, empresa=EMPRESA, tem_pdv=TEM_PDV)
     if hasattr(st, "iframe"):
         st.iframe(html_fin, height=1000)
     else:
@@ -325,7 +361,7 @@ snap = None
 if FONTE == "snapshot":
     try:
         with st.spinner("Carregando dados…"):
-            snap = snapshot()
+            snap = snapshot(cfg["url"], cfg["chave"])
             EMPRESA = snap.get("empresa") or EMPRESA
     except ErroSnapshot as e:
         st.error(str(e))
@@ -374,7 +410,7 @@ if ajuste:
 inicio, fim = d_ini.isoformat(), d_fim.isoformat()
 with c2:
     if st.button("Atualizar dados", use_container_width=True):
-        for f in (snapshot, vendas, estoque):
+        for f in (snapshot, vendas, estoque, snapshot_financeiro):
             f.clear()
         st.rerun()
 p_ini, p_fim = periodo_anterior(inicio, fim)
@@ -385,24 +421,27 @@ if snap is not None:
     est = snap.get("estoque") if fim == snap["fim"] else None
     atualizado, fonte_painel = snap["gerado_em"], "omie"
     hist, hist_ini, hist_fim = snap["rows"], snap["inicio"], snap["fim"]
+    if not TEM_PDV:
+        rows = [r for r in rows if r.get("ch") != "PDV"]
+        rows_prev = [r for r in rows_prev if r.get("ch") != "PDV"]
+        hist = [r for r in hist if r.get("ch") != "PDV"]
 else:
     try:
         with st.spinner("Consultando a Omie (a primeira carga pode levar alguns minutos)…"):
-            rows, ts = (vendas if fim >= hoje.isoformat() else vendas_fechado)(inicio, fim)
-            rows_prev, _ = vendas_fechado(p_ini, p_fim)
-            est = estoque() if fim >= hoje.isoformat() else None
+            rows, ts = (vendas if fim >= hoje.isoformat() else vendas_fechado)(inicio, fim, FONTE)
+            rows_prev, _ = vendas_fechado(p_ini, p_fim, FONTE)
+            est = estoque(FONTE) if fim >= hoje.isoformat() else None
     except omie.OmieBloqueada:
         st.warning("A Omie bloqueou temporariamente as consultas por excesso de chamadas. Tente de novo em alguns minutos.")
         st.stop()
-    except Exception:  # nunca exibir detalhes que possam conter credenciais
+    except Exception:
         st.error("Não foi possível consultar a fonte de dados.")
         st.stop()
     atualizado = time.strftime("%d/%m/%Y %H:%M", time.localtime(ts))
     fonte_painel = FONTE
     hist, hist_ini, hist_fim = rows_prev + rows, (p_ini if rows_prev else inicio), fim
 
-# Histórico completo vai junto para a seção Relatório (comparativos e previsão).
-extra = {"tem_pdv": True, "hist": hist, "hist_inicio": hist_ini, "hist_fim": hist_fim}
+extra = {"tem_pdv": TEM_PDV, "hist": hist, "hist_inicio": hist_ini, "hist_fim": hist_fim}
 html_app = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,
                               modo="app", **extra)
 html_rel = painel.montar_html(rows, rows_prev, inicio, fim, p_ini, p_fim, EMPRESA, atualizado, fonte_painel, est,

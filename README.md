@@ -1,4 +1,6 @@
-# Painel de Vendas · JCA Filial + Omie
+# Painel unificado · JCA (Matriz · Filial · Olaria)
+
+App único: [https://faturamentojca.streamlit.app/](https://faturamentojca.streamlit.app/) — botões **MATRIZ | FILIAL | OLARIA**. Em Matriz e Filial há ainda **Faturamento | Financeiro**. A Olaria mostra o painel de custos do galpão (`olaria/`).
 
 Painel igual ao relatório estático do trimestre, mas alimentado pela API Omie (NF de saída).  
 As **chaves da API ficam somente no `.env` desta pasta**, no PC onde o painel roda — **não vão para git, nuvem nem frontend**.
@@ -65,9 +67,9 @@ Também por URL: `http://localhost:8000/api/relatorio?inicio=2026-09-01&fim=2026
 
 ## Streamlit (deploy)
 
-`streamlit_app.py` mostra o mesmo painel (`frontend/index.html` com os dados embutidos), com seletor de período e botão para baixar o relatório HTML.
+`streamlit_app.py` é o app unificado. Secrets necessários: `PAINEL_DATA_URL`/`PAINEL_DATA_KEY` (Filial), `PAINEL_MATRIZ_DATA_URL`/`PAINEL_MATRIZ_DATA_KEY` (Matriz) e `APP_PASSWORD_HASH`. A Matriz continua com robô e chave próprios em [FATURAMENTOMATRIZJCA](https://github.com/lelisson/FATURAMENTOMATRIZJCA); a Olaria standalone em [galpaoolaria.streamlit.app](https://galpaoolaria.streamlit.app/) (repo [GALPAO_OLARIA](https://github.com/lelisson/GALPAO_OLARIA)).
 
-Os botões **Faturamento** e **Financeiro** no cabeçalho trocam de painel. O Financeiro (títulos, movimentos e custos da filial; código em `financeiro/`, o mesmo do painel local "controle financeiro loja jca") é gerado pelo mesmo robô, no máximo a cada hora (`FIN_INTERVALO_MIN=55`), de `FIN_INICIO=2026-01-01` até hoje, e publicado como `financeiro.enc` (cifrado com `PAINEL_DATA_KEY`) ao lado do `painel.enc`. Meses fechados ficam em `data/cache_meses.enc` (cifrado, no cache do Actions).
+Os botões **Faturamento** e **Financeiro** (Matriz/Filial) trocam de painel. O Financeiro é gerado pelo robô da empresa, no máximo a cada hora, e publicado como `financeiro.enc` ao lado do `painel.enc`.
 
 - Local: `streamlit run streamlit_app.py` (usa o `.env`).
 - Streamlit Community Cloud: arquivo principal `streamlit_app.py`; configuração em **Settings > Secrets** no formato de `.streamlit/secrets.toml.example`. `APP_PASSWORD_HASH` (opcional) pede senha para abrir; só o hash PBKDF2 fica guardado. `python scripts/gerar_secrets.py --nova-senha` gera senha nova (em `~/.painel-omie/senha-streamlit.txt`) e o `secrets.toml` com o hash. Após 5 erros a sessão fica bloqueada por 5 min.

@@ -15,5 +15,5 @@ __pycache__/
 .venv/
 *.pyc
 
-# cache local do painel financeiro
-data/
+# cache local do painel financeiro (só na raiz; olária/data fica versionada)
+/data/
