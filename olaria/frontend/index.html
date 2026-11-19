@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Custos · Galpão Olaria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<script src="/vendor/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f5f6fa;--surface:#ffffff;--surface2:#f8f9fc;--line:#e5e7ef;--grid:#eef0f5;
+  --ink:#0f172a;--ink2:#475569;--ink3:#94a3b8;
+  --accent:#4f46e5;--accent-soft:#eef0ff;--good:#16a34a;--good-soft:#e8f7ee;--bad:#e11d48;--bad-soft:#fdecef;
+  --warn:#d97706;--warn-soft:#fdf3e2;
+  --c1:#4f46e5;--c2:#0891b2;--c3:#d97706;--c4:#7c3aed;--c5:#db2777;--c6:#059669;
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 1px 3px rgba(15,23,42,.06);
+  --font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0a0d14;--surface:#111622;--surface2:#151b29;--line:#1e2636;--grid:#1a2130;
+  --ink:#e7ecf5;--ink2:#9ba7ba;--ink3:#64718a;
+  --accent:#818cf8;--accent-soft:#1c2140;--good:#34d399;--good-soft:#0f2a22;--bad:#fb7185;--bad-soft:#2d1520;
+  --warn:#fbbf24;--warn-soft:#2b2212;
+  --c1:#818cf8;--c2:#22d3ee;--c3:#fbbf24;--c4:#c084fc;--c5:#f472b6;--c6:#34d399;
+  --shadow:none;color-scheme:dark;
+}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html{scroll-behavior:smooth;scroll-padding-top:88px}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.01em}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:22px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 8px}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--c1),var(--c2));display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
+.brand b{display:block;font-size:14px}.brand small{color:var(--ink3);font-size:12px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--ink2);text-decoration:none;font-weight:500}
+.nav a:hover{background:var(--surface2);color:var(--ink)}
+.nav a.on{background:var(--accent-soft);color:var(--accent)}
+.nav svg{width:17px;height:17px;flex:none}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding:0 8px}
+.status{display:flex;align-items:center;gap:8px;color:var(--ink3);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--good);flex:none}
+.ghost{color:var(--ink3);font-size:12px;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.ghost:hover{color:var(--ink)}
+.main{min-width:0;padding:0 28px 48px}
+.bar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);padding:18px 0 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.bar h1{font-size:20px}.bar .per{color:var(--ink3);font-size:13px;margin-top:2px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:3px;gap:2px}
+.seg button{border:0;background:none;color:var(--ink2);padding:5px 11px;border-radius:6px;cursor:pointer;font-weight:500;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.ctl{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:13px;color:var(--ink);max-width:220px}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink2)}
+.btn:hover{color:var(--ink);border-color:var(--ink3)}
+section{padding-top:28px;display:flex;flex-direction:column;gap:14px}
+.sh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sh h2{font-size:16px}.muted{color:var(--ink3);font-size:12.5px}
+.grid{display:grid;gap:14px;min-width:0}
+.g4{grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.g21{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+@media (max-width:1100px){.g21{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--shadow);min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.ch h3{font-size:14px}
+.kpi{position:relative;overflow:hidden}
+.lab{color:var(--ink2);font-size:14.5px;font-weight:600}
+.val{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:6px;font-variant-numeric:tabular-nums}
+.note{color:var(--ink3);font-size:12.5px;margin-top:2px;font-variant-numeric:tabular-nums}
+.up{color:var(--good)}.dn{color:var(--bad)}.wn{color:var(--warn)}
+.chart{position:relative;height:300px}.chart.tall{height:360px}
+.tw{overflow:auto;max-height:520px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--surface2);color:var(--ink2);font-weight:600;cursor:pointer;user-select:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.wrapc{max-width:280px;word-break:break-word}
+.empty{color:var(--ink3);text-align:center;padding:28px}
+.bl{display:flex;flex-direction:column;gap:6px}
+.bl-row{position:relative;display:flex;justify-content:space-between;gap:12px;padding:7px 10px;border-radius:7px;font-size:13px;overflow:hidden}
+.bl-bar{position:absolute;inset:0 auto 0 0;background:var(--accent-soft);border-radius:7px;z-index:0}
+.bl-l,.bl-v{position:relative;z-index:1}.bl-v{font-variant-numeric:tabular-nums;color:var(--ink2)}
+@media print{.side,.controls{display:none!important}.app{display:block}.main{padding:0}}
+@media (max-width:900px){.app{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo">JCA</div><div><b>Galpão Olaria</b><small>Custos</small></div></div>
+    <nav class="nav">
+      <a href="#visao" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 17V9M12 17V7M16 17v-5"/></svg>Visão geral</a>
+      <a href="#deps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>Departamentos</a>
+      <a href="#detalhe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Detalhe</a>
+    </nav>
+    <div class="side-foot">
+      <div class="status" id="status"><span class="dot"></span><span id="statusTxt">Somente leitura</span></div>
+      <button class="ghost" id="tema" type="button">Tema claro</button>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="bar">
+      <div>
+        <h1>Controle de custos</h1>
+        <div class="per" id="periodo"></div>
+      </div>
+      <div class="controls">
+        <div class="seg" id="fm" role="group" aria-label="Período"></div>
+        <select class="ctl" id="fCat" aria-label="Departamento"></select>
+      </div>
+    </div>
+
+    <section id="visao">
+      <div class="sh"><h2>Visão geral</h2><span class="muted" id="visaoSub"></span></div>
+      <div class="grid g4" id="kpis"></div>
+      <div class="grid g2">
+        <div class="card"><div class="ch"><h3>Despesas × receita</h3></div><div class="chart"><canvas id="cSerie" role="img" aria-label="Despesas e receita"></canvas></div></div>
+        <div class="card"><div class="ch"><h3>Resultado mensal</h3></div><div class="chart"><canvas id="cSaldo" role="img" aria-label="Resultado"></canvas></div></div>
+      </div>
+    </section>
+
+    <section id="deps">
+      <div class="sh"><h2>Departamentos</h2><span class="muted" id="depsSub"></span></div>
+      <div class="grid g21">
+        <div class="card"><div class="ch"><h3>Composição no período</h3></div><div class="chart tall"><canvas id="cDep" role="img" aria-label="Departamentos"></canvas></div></div>
+        <div class="card"><div class="ch"><h3>Ranking</h3></div><div class="bl" id="blDep"></div></div>
+      </div>
+    </section>
+
+    <section id="detalhe">
+      <div class="sh"><h2>Detalhe por despesa</h2><span class="muted" id="detSub"></span></div>
+      <div class="card"><div class="tw"><table id="tDesp"></table></div></div>
+    </section>
+  </div>
+</div>
+<script>
+const S=window.__STATIC__||null;
+const $=id=>document.getElementById(id);
+const brl=n=>(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const brk=n=>Math.abs(n)>=1000?(n<0?'−':'')+'R$ '+(Math.abs(n)/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil':brl(n);
+const num=n=>n.toLocaleString('pt-BR');
+const pct=n=>n.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const soma=a=>a.reduce((s,x)=>s+x,0);
+const st={m:'all',cat:'all'};
+let D=null;
+const charts={};
+function mk(id,cfg){if(charts[id])charts[id].destroy();const el=$(id);if(el)charts[id]=new Chart(el,cfg)}
+function base(){
+  Chart.defaults.font.family=css('--font');Chart.defaults.font.size=12;Chart.defaults.color=css('--ink3');Chart.defaults.borderColor=css('--grid');
+  Object.assign(Chart.defaults.plugins.tooltip,{backgroundColor:css('--surface'),titleColor:css('--ink'),bodyColor:css('--ink2'),borderColor:css('--line'),borderWidth:1,padding:10,cornerRadius:8,boxPadding:4});
+}
+const legenda={position:'bottom',labels:{usePointStyle:true,pointStyle:'rectRounded',boxWidth:10,padding:16}};
+function axes(){return{x:{grid:{display:false},border:{display:false}},y:{ticks:{callback:v=>brk(v)},grid:{color:css('--grid')},border:{display:false}}}}
+const pal=()=>['--c1','--c2','--c3','--c4','--c5','--c6'].map(css);
+
+function idxMes(){return st.m==='all'?D.meses.map((_,i)=>i):[D.meses.indexOf(st.m)]}
+function totDesp(i=idxMes()){return i.reduce((s,m)=>s+D.despesa_mes[m],0)}
+function totRec(i=idxMes()){return i.reduce((s,m)=>s+D.receita_mes[m],0)}
+function porCat(i=idxMes()){
+  const map=new Map();
+  D.despesas.forEach((nome,ix)=>{
+    const cat=D.categorias[ix];
+    if(st.cat!=='all'&&cat!==st.cat)return;
+    const t=i.reduce((s,m)=>s+(D.realizado[ix][m]||0),0);
+    if(!t)return;
+    map.set(cat,(map.get(cat)||0)+t);
+  });
+  return [...map.entries()].map(([k,t])=>({k,t})).sort((a,b)=>b.t-a.t);
+}
+function linhasDet(i=idxMes()){
+  const out=[];
+  D.despesas.forEach((nome,ix)=>{
+    const cat=D.categorias[ix];
+    if(st.cat!=='all'&&cat!==st.cat)return;
+    const vals=i.map(m=>D.realizado[ix][m]||0);
+    const t=soma(vals);
+    if(!t)return;
+    out.push({nome,cat,t,vals});
+  });
+  return out.sort((a,b)=>b.t-a.t);
+}
+
+function buildFilters(){
+  const cats=[...new Set(D.categorias)].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  $('fCat').innerHTML=`<option value="all">Todos os departamentos</option>`+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('fCat').value=cats.includes(st.cat)?st.cat:'all';
+  st.cat=$('fCat').value;
+  if(st.m!=='all'&&!D.meses.includes(st.m))st.m='all';
+  $('fm').innerHTML=`<button type="button" data-m="all" aria-pressed="${st.m==='all'}">Ano</button>`+
+    D.meses.map(m=>`<button type="button" data-m="${m}" aria-pressed="${st.m===m}">${m}</button>`).join('');
+}
+
+function renderKPIs(){
+  const i=idxMes(),desp=totDesp(i),rec=totRec(i),saldo=rec-desp,n=i.length,teto=D.teto*n,lim=teto-desp;
+  const rot=st.m==='all'?`Ano ${D.ano}`:`${st.m}/${D.ano}`;
+  $('periodo').textContent=`${rot} · teto de referência ${brl(D.teto)}/mês · somente leitura`;
+  $('visaoSub').textContent=st.cat==='all'?'Todos os departamentos':st.cat;
+  const k=(l,v,n,cls='')=>`<div class="card kpi"><span class="lab">${l}</span><div class="val ${cls}">${v}</div><div class="note">${n}</div></div>`;
+  $('kpis').innerHTML=
+    k('Receita',brl(rec),rot)+
+    k('Despesa realizada',brl(desp),`${pct(teto?100*desp/teto:0)} do teto ${brl(teto)}`,desp>teto?'dn':'')+
+    k('Limite disponível',brl(lim),lim>=0?'Dentro do teto':'Acima do teto',lim>=0?'up':'dn')+
+    k('Resultado',brl(saldo),`Média mensal de despesa ${brl(D.media_despesa_mes)}`,saldo>=0?'up':'dn');
+}
+
+function renderCharts(){
+  const i=idxMes(),labels=i.map(m=>D.meses[m]);
+  const desp=i.map(m=>D.despesa_mes[m]),rec=i.map(m=>D.receita_mes[m]),saldo=i.map((m,ix)=>rec[ix]-desp[ix]);
+  mk('cSerie',{type:'bar',data:{labels,datasets:[
+    {label:'Despesa',data:desp,backgroundColor:css('--bad')+'99',borderRadius:5,borderSkipped:false,maxBarThickness:28},
+    {label:'Receita',data:rec,backgroundColor:css('--good')+'99',borderRadius:5,borderSkipped:false,maxBarThickness:28}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:legenda,tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${brl(c.parsed.y)}`}}},scales:axes()}});
+  mk('cSaldo',{type:'bar',data:{labels,datasets:[{label:'Resultado',data:saldo,backgroundColor:saldo.map(v=>v>=0?css('--good')+'aa':css('--bad')+'aa'),borderRadius:5,borderSkipped:false,maxBarThickness:28}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` Resultado: ${brl(c.parsed.y)}`}}},scales:axes()}});
+
+  const cats=porCat();
+  $('depsSub').textContent=`${num(cats.length)} departamentos · ${brl(soma(cats.map(c=>c.t)))}`;
+  const cores=pal();
+  mk('cDep',{type:'doughnut',data:{labels:cats.map(c=>c.k),datasets:[{data:cats.map(c=>c.t),backgroundColor:cats.map((_,ix)=>cores[ix%cores.length]),borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${brl(c.parsed)}`}}}}});
+  const max=cats[0]?.t||1;
+  $('blDep').innerHTML=cats.length?cats.map((c,ix)=>`<div class="bl-row"><div class="bl-bar" style="width:${100*c.t/max}%;background:${cores[ix%cores.length]}22"></div><span class="bl-l">${esc(c.k)}</span><span class="bl-v">${brl(c.t)}</span></div>`).join(''):'<div class="empty">Sem dados</div>';
+}
+
+const tstate={};
+function table(id,cols,rows){
+  const s=tstate[id]||(tstate[id]={k:cols[0].k,dir:-1});
+  const sorted=[...rows].sort((a,b)=>{const x=a[s.k],y=b[s.k];return (typeof x==='number'?x-y:String(x??'').localeCompare(String(y??''),'pt-BR'))*s.dir});
+  const el=$(id);
+  el.innerHTML='<thead><tr>'+cols.map(c=>`<th class="${c.num?'num':''}" data-k="${c.k}">${c.l}</th>`).join('')+'</tr></thead><tbody>'+
+    (sorted.length?sorted.map(r=>'<tr>'+cols.map(c=>`<td class="${c.num?'num':''} ${c.wrap?'wrapc':''}">${c.f?c.f(r[c.k],r):esc(r[c.k])}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${cols.length}" class="empty">Sem dados</td></tr>`)+'</tbody>';
+  el.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(s.k===k)s.dir*=-1;else{s.k=k;s.dir=cols.find(c=>c.k===k).num?-1:1}table(id,cols,rows)});
+}
+
+function renderDet(){
+  const i=idxMes(),rows=linhasDet(i);
+  $('detSub').textContent=`${num(rows.length)} linhas · ${brl(soma(rows.map(r=>r.t)))}`;
+  const cols=[{k:'nome',l:'Despesa',wrap:1},{k:'cat',l:'Departamento'},{k:'t',l:'Total',num:1,f:brl}];
+  if(st.m==='all')D.meses.forEach((m,ix)=>cols.push({k:'m'+ix,l:m,num:1,f:v=>v?brl(v):'—'}));
+  const data=rows.map(r=>{const o={nome:r.nome,cat:r.cat,t:r.t};if(st.m==='all')r.vals.forEach((v,ix)=>o['m'+ix]=v);return o});
+  tstate.tDesp??={k:'t',dir:-1};
+  table('tDesp',cols,data);
+}
+
+function render(){
+  if(!D)return;
+  buildFilters();renderKPIs();renderCharts();renderDet();
+}
+
+$('fm').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;st.m=b.dataset.m;render()});
+$('fCat').onchange=e=>{st.cat=e.target.value;render()};
+$('tema').onclick=()=>{const dark=document.documentElement.getAttribute('data-theme')==='dark';document.documentElement.setAttribute('data-theme',dark?'light':'dark');$('tema').textContent=dark?'Tema escuro':'Tema claro';base();render()};
+const secs=[...document.querySelectorAll('section')].map(s=>[document.querySelector(`.nav a[href="#${s.id}"]`),s]);
+addEventListener('scroll',()=>{let on=secs[0][0];secs.forEach(([a,s])=>{if(s&&s.getBoundingClientRect().top<140)on=a});secs.forEach(([a])=>a&&a.classList.toggle('on',a===on))},{passive:true});
+
+if(S){
+  D=S;base();
+  const g=S.gerado_em?new Date(S.gerado_em*1000).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
+  $('statusTxt').textContent=g?(S.app?'Atualizado em ':'Gerado em ')+g:'Somente leitura';
+  document.title=`Custos · Galpão Olaria · ${D.ano}`;
+  render();
+}
+</script>
+</body>
+</html>

@@ -283,11 +283,35 @@ def cabecalho(pesos: list[float]) -> list:
 
 
 def pagina_olaria() -> None:
-    c0, = st.columns([1.8])
+    """Mesmo padrão visual da Matriz/Filial: cabeçalho Streamlit + painel HTML embutido."""
+    from olaria import pagina as ola_pagina
+    from olaria.config import PLANILHA_PADRAO
+
+    c0, c1, c2 = st.columns([1.8, 1.1, 6.0])
     with c0:
         barra_empresa()
-    from olaria.app import main as olaria_main
-    olaria_main(embutido=True)
+    with c1:
+        if st.button("Atualizar dados", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+    if not PLANILHA_PADRAO.exists():
+        st.error("Planilha da Olaria não encontrada.")
+        st.stop()
+    try:
+        with st.spinner("Carregando Olaria…"):
+            dados = ola_pagina.payload(app=True)
+    except Exception as e:
+        st.error(f"Não foi possível carregar a planilha da Olaria ({type(e).__name__}).")
+        st.stop()
+    with c2:
+        gerado = datetime.fromtimestamp(dados["gerado_em"], ZoneInfo("America/Sao_Paulo"))
+        st.caption(f"Atualizado em {gerado:%d/%m/%Y %H:%M} · ano {dados['ano']} · somente leitura")
+    components.html(MASCARA_DATA, height=0)
+    html = ola_pagina.montar_html(dados, app=True)
+    if hasattr(st, "iframe"):
+        st.iframe(html, height=1000)
+    else:
+        components.html(html, height=1000, scrolling=True)
     st.stop()
 
 
